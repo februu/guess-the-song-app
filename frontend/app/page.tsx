@@ -18,7 +18,7 @@ export default function HomePage() {
 
           <div className="z-10 flex w-[260px] flex-col gap-4">
             <button
-              onClick={() => router.push('/play')}
+              onClick={() => router.push('/mode')}
               className="pixel-btn border-4 border-black bg-gradient-to-b from-fuchsia-500 to-purple-600 py-3 text-white"
             >
               ▶ START GAME
