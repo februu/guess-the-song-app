@@ -105,4 +105,3 @@ If error occurs, the `ok` field should be set to `false`. Error field should be 
   "message": "Room does not exist"
 }
 ```
->>>>>>> b707fff (Add template for HTTP and WS message communication contract)
