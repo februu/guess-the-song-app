@@ -19,3 +19,8 @@ services:
       - "3000:3000"
     depends_on:
       - backend
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
