@@ -1,5 +1,7 @@
 FROM python:3.12-slim
 
+COPY --from=mwader/static-ffmpeg:latest /ffmpeg /usr/local/bin/ffmpeg
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 ENV UV_NO_DEV=1
