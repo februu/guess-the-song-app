@@ -89,11 +89,43 @@ Non-string messages are chunks of audio stream.
 
 ### Frontend -> Backend
 
-_TBD_
+room.join
+
+{"code": "abcd123"}
+
+room.create 
+
+{"playlist_id": ""}
+
+room.start
+
+song.guess
+
+{"guess: ""}
 
 ### Backend -> Frontend
 
-_TBD_
+room.joined
+
+{"players": []}
+
+room.created
+
+{"code": "abcd123"}
+
+room.started
+
+song.correct
+
+song.incorrect
+
+room.updated
+
+room.round_started
+
+room.round_ended
+
+room.ended
 
 ## Error Convention
 
