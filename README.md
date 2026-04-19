@@ -63,25 +63,16 @@ Returns a list of user's playlists.
 }
 ```
 
-**GET** _/rooms/join/{room_code}_
-
-Joins a room with specified code.
-
-```json
-{
-  "ok": true
-}
-```
 
 ## WS Communication
 
 All websocket string messages should follow this format:
 
-```json
+```js
 {
   "type": "namespace.event",
   "data": {}, // object containing additional fields depending on the message type
-  "ok": true
+  "ok": true // required only in backend -> frontend messages
 }
 ```
 
@@ -89,43 +80,134 @@ Non-string messages are chunks of audio stream.
 
 ### Frontend -> Backend
 
-room.join
+**room.join**
 
-{"code": "abcd123"}
+_Joins the room with code and nickname._
 
-room.create 
+```json
+{"name": "nickname", "code": "abcd123"}
+```
 
-{"playlist_id": ""}
+- `name` must be between 3-20 letters, numbers + underscores.
+- `code` must consist of 6 letters.
 
-room.start
+**room.create**
 
-song.guess
+_Creates a new room, sets a playlist, amount of rounds and adds a user as a host._
 
-{"guess: ""}
+```json
+{"name": "nickname", "playlist_id": "", "rounds" : 10}
+```
+
+- `name` must be between 3-20 letters, numbers + underscores.
+- 1 <=`rounds` <= 20
+- `playlistid` must be a valid spotify playlist.
+
+**room.start**
+
+_Starts the game for all players._
+
+```json
+{}
+```
+
+**song.guess**
+
+_Sends a guess._
+
+```json
+{"guess": ""}
+```
+
+- `guess` must be less that 100 characters.
 
 ### Backend -> Frontend
 
-room.joined
+**room.updated**
 
-{"players": []}
+_Returned to a client with current game state. The State object will have always have the same fields_
 
-room.created
+```json
+{
+  "state": {
+    "code": "ABCDEF",
+    "host_name": "alice",
+    "members": ["alice", "bob", "charlie"],
+    "scoreboard": {
+      "alice": 15,
+      "bob": 10,
+      "charlie": 5
+    },
+    "playlist_name": "Top Hits 2025",
+    "playlist_img": "https://i.scdn.co/image/ab67616d0000b273example",
+    "started": true,
+    "rounds": 5,
+    "current_round": 2
+  }
+}
+```
 
-{"code": "abcd123"}
+**room.started**
 
-room.started
+_Returned to all clients after host sent_ **room.start**. _The game will begin shortly after receiving this_
 
-song.correct
+**song.correct**
 
-song.incorrect
+_Returned to a client after host sent_ **song.guess** _if the guess was correct. Contains info about amount of earned points and metadata of currently playing song to display._
 
-room.updated
+```json
+{
+  "points" : 233,
+  "title": "Example Title",
+  "artist": "Artist Name",
+  "img": "https://i.scdn.co/image/ab67616d0000b273example"
+}
+```
 
-room.round_started
+**song.incorrect**
 
-room.round_ended
+_Returned to a client after host sent_ **song.guess** _if the guess was incorrect._
 
-room.ended
+**room.round_started**
+
+_Returned to all clients signifying beginning of the next round. Packets with music will be delivered shortly. Round clock timer can be started from this point (~30 seconds?)._
+
+**room.round_ended**
+
+_Returned to all clients signifying ending of the current round. Round end clock timer can be started from this point (~10 seconds?). Contains info about amount of earned points this round and metadata of the song that was playing this round to display._
+
+```json
+{
+  "points" : 0,
+  "title": "Example Title",
+  "artist": "Artist Name",
+  "img": "https://i.scdn.co/image/ab67616d0000b273example"
+}
+```
+
+**room.ended**
+
+_Returned to all clients when game ends. Returns the state like_ **room.updated** _allowing to display final scores. Client will be disconnected by the server from the websocket in the next couple seconds._
+
+```json
+{
+  "state": {
+    "code": "ABCDEF",
+    "host_name": "alice",
+    "members": ["alice", "bob", "charlie"],
+    "scoreboard": {
+      "alice": 15,
+      "bob": 10,
+      "charlie": 5
+    },
+    "playlist_name": "Top Hits 2025",
+    "playlist_img": "https://i.scdn.co/image/ab67616d0000b273example",
+    "started": true,
+    "rounds": 5,
+    "current_round": 2
+  }
+}
+```
 
 ## Error Convention
 
