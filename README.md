@@ -110,6 +110,7 @@ _Starts the game for all players._
 ```json
 {}
 ```
+- user must be a host.
 
 **song.guess**
 
