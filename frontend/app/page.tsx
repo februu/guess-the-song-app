@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { ThemeToggle } from "./theme-toggle";
 
 export default function Home() {
@@ -44,7 +47,7 @@ export default function Home() {
             {/* Game mode cards */}
             <div className="mt-8 flex gap-6">
 
-              {/* Singleplayer mode card */}
+              {/* Singleplayer mode card — navigates to /singleplayer */}
               <ModeCard
                 icon="/singleplayer.svg"
                 title="Singleplayer"
@@ -55,10 +58,11 @@ export default function Home() {
                   "Unlock achievements",
                 ]}
                 buttonLabel="Play solo"
+                href="/singleplayer"
                 emoji="🎵"
               />
 
-              {/* Multiplayer mode card */}
+              {/* Multiplayer mode card — navigates to /multiplayer */}
               <ModeCard
                 icon="/multiplayer.svg"
                 title="Multiplayer"
@@ -69,7 +73,7 @@ export default function Home() {
                   "Climb the leaderboards",
                 ]}
                 buttonLabel="Play with friends"
-                buttonClassName="play-button"
+                href="/multiplayer"
                 emoji="👥"
               />
             </div>
@@ -97,9 +101,11 @@ function ModeCard({
   description, // short description below the heading
   items,       // list of feature bullet points
   buttonLabel, // text on the CTA button
-  buttonClassName, // optional CSS class for the button (e.g. "play-button" from global.css)
+  href,        // route to navigate to when the button is clicked
   emoji,       // emoji shown in each feature row icon
 }: any) {
+  const router = useRouter();
+
   return (
     <div className="
       w-[360px] rounded-[20px] px-6 py-6 flex flex-col items-center text-center
@@ -131,17 +137,11 @@ function ModeCard({
         ))}
       </div>
 
-      {/* CTA button — uses .play-button class from global.css if buttonClassName is provided */}
+      {/* CTA button — navigates to the route specified by href */}
       <div className="mt-6 w-full flex justify-center">
-        {buttonClassName ? (
-          <button className={buttonClassName}>
-            {buttonLabel}
-          </button>
-        ) : (
-          <button className="play-button">
-            {buttonLabel}
-          </button>
-        )}
+        <button className="play-button" onClick={() => router.push(href)}>
+          {buttonLabel}
+        </button>
       </div>
     </div>
   );
