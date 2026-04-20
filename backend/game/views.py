@@ -11,7 +11,7 @@ from django.shortcuts import redirect
 from django.utils.timezone import now, timedelta
 from django.views.decorators.http import require_GET
 
-from .services.spotify import get_playlists
+from .services.spotify import get_playlists, get_user_profile
 
 from .models import SpotifyToken
 
@@ -64,6 +64,36 @@ def spotify_playlists(request):
         )
 
     return JsonResponse({"playlists": playlists})
+
+
+@require_GET
+def spotify_user_profile(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "authentication_required"}, status=401)
+
+    try:
+        profile = get_user_profile(request.user)
+    except SpotifyToken.DoesNotExist:
+        return JsonResponse({"error": "spotify_token_not_found"}, status=404)
+    except ValueError as exc:
+        return JsonResponse(
+            {"error": "spotify_auth_required", "detail": str(exc)}, status=403
+        )
+    except httpx.HTTPStatusError as exc:
+        return JsonResponse(
+            {
+                "error": "spotify_http_error",
+                "status_code": exc.response.status_code,
+                "response_body": exc.response.text,
+            },
+            status=502,
+        )
+    except Exception as exc:
+        return JsonResponse(
+            {"error": "spotify_fetch_failed", "detail": str(exc)}, status=500
+        )
+
+    return JsonResponse({"profile": profile})
 
 
 @require_GET

@@ -63,6 +63,25 @@ def get_playlists(user) -> list[dict]:
     return playlists
 
 
+def get_user_profile(user) -> dict:
+    """Fetches the user's Spotify profile information."""
+    if not getattr(user, "is_authenticated", False):
+        raise ValueError("authenticated user required")
+
+    token = get_valid_token(user)
+    headers = {"Authorization": f"Bearer {token}"}
+    url = f"{API_BASE}/me"
+    resp = httpx.get(url, headers=headers)
+    resp.raise_for_status()
+    payload = resp.json()
+
+    return {
+        "id": payload.get("id"),
+        "display_name": payload.get("display_name"),
+        "profile_image_url": (payload.get("images") or [{}])[0].get("url"),
+    }
+
+
 def get_playlist_tracks(user, playlist_id: str) -> list[dict]:
     """Fetches the tracks for a given playlist."""
     if not getattr(user, "is_authenticated", False):
