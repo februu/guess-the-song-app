@@ -6,5 +6,4 @@ urlpatterns = [
     path("spotify/login/", spotify_login, name="spotify_login"),
     path("spotify/playlists/", spotify_playlists, name="spotify_playlists"),
     path("callback", spotify_callback, name="spotify_callback"),
-    path("<path:unmatched>", unmatched_path, name="unmatched_path"),
 ]

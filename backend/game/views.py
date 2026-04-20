@@ -155,15 +155,3 @@ def spotify_callback(request):
     )
 
     return JsonResponse({"ok": True, "spotify_connected": True})
-
-
-def unmatched_path(request, unmatched=None):
-    return JsonResponse(
-        {
-            "error": "not_found",
-            "detail": "No matching endpoint was found.",
-            "path": request.path,
-            "unmatched": unmatched,
-        },
-        status=404,
-    )
