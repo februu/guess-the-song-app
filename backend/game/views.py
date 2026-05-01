@@ -37,6 +37,15 @@ def spotify_login(request):
 
 
 @require_GET
+def spotify_logout(request):
+    if request.user.is_authenticated:
+        SpotifyToken.objects.filter(user=request.user).delete()
+        request.user.auth_token.delete()
+        request.user.delete()
+    return JsonResponse({"ok": True, "spotify_disconnected": True})
+
+
+@require_GET
 def spotify_playlists(request):
     if not request.user.is_authenticated:
         return JsonResponse(
