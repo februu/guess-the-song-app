@@ -39,61 +39,75 @@ def spotify_login(request):
 @require_GET
 def spotify_playlists(request):
     if not request.user.is_authenticated:
-        return JsonResponse({"error": "authentication_required"}, status=401)
+        return JsonResponse(
+            {"ok": False, "error": "authentication_required"}, status=401
+        )
 
     try:
         playlists = get_playlists(request.user)
     except SpotifyToken.DoesNotExist:
-        return JsonResponse({"error": "spotify_token_not_found"}, status=404)
+        return JsonResponse(
+            {"ok": False, "error": "spotify_token_not_found"}, status=404
+        )
     except ValueError as exc:
         return JsonResponse(
-            {"error": "spotify_auth_required", "detail": str(exc)}, status=403
+            {"ok": False, "error": "spotify_auth_required", "detail": str(exc)},
+            status=403,
         )
     except httpx.HTTPStatusError as exc:
         return JsonResponse(
             {
+                "ok": False,
                 "error": "spotify_http_error",
                 "status_code": exc.response.status_code,
-                "response_body": exc.response.text,
+                "message": exc.response.text,
             },
             status=502,
         )
     except Exception as exc:
         return JsonResponse(
-            {"error": "spotify_fetch_failed", "detail": str(exc)}, status=500
+            {"ok": False, "error": "spotify_fetch_failed", "detail": str(exc)},
+            status=500,
         )
 
-    return JsonResponse({"playlists": playlists})
+    return JsonResponse({"ok": True, "playlists": playlists})
 
 
 @require_GET
 def spotify_user_profile(request):
     if not request.user.is_authenticated:
-        return JsonResponse({"error": "authentication_required"}, status=401)
+        return JsonResponse(
+            {"ok": False, "error": "authentication_required"}, status=401
+        )
 
     try:
         profile = get_user_profile(request.user)
     except SpotifyToken.DoesNotExist:
-        return JsonResponse({"error": "spotify_token_not_found"}, status=404)
+        return JsonResponse(
+            {"ok": False, "error": "spotify_token_not_found"}, status=404
+        )
     except ValueError as exc:
         return JsonResponse(
-            {"error": "spotify_auth_required", "detail": str(exc)}, status=403
+            {"ok": False, "error": "spotify_auth_required", "detail": str(exc)},
+            status=403,
         )
     except httpx.HTTPStatusError as exc:
         return JsonResponse(
             {
+                "ok": False,
                 "error": "spotify_http_error",
                 "status_code": exc.response.status_code,
-                "response_body": exc.response.text,
+                "message": exc.response.text,
             },
             status=502,
         )
     except Exception as exc:
         return JsonResponse(
-            {"error": "spotify_fetch_failed", "detail": str(exc)}, status=500
+            {"ok": False, "error": "spotify_fetch_failed", "detail": str(exc)},
+            status=500,
         )
 
-    return JsonResponse({"profile": profile})
+    return JsonResponse({"ok": True, "profile": profile})
 
 
 @require_GET
@@ -101,8 +115,9 @@ def spotify_callback(request):
     if request.GET.get("error"):
         return JsonResponse(
             {
+                "ok": False,
                 "error": "spotify_authorization_failed",
-                "detail": request.GET.get("error"),
+                "message": request.GET.get("error"),
             },
             status=400,
         )
@@ -111,11 +126,11 @@ def spotify_callback(request):
     state = request.GET.get("state")
 
     if not code or not state:
-        return JsonResponse({"error": "missing_code_or_state"}, status=400)
+        return JsonResponse({"ok": False, "error": "missing_code_or_state"}, status=400)
 
     state_exists = cache.get(f"spotify_state_{state}")
     if not state_exists:
-        return JsonResponse({"error": "invalid_state"}, status=400)
+        return JsonResponse({"ok": False, "error": "invalid_state"}, status=400)
 
     cache.delete(f"spotify_state_{state}")
 
@@ -133,9 +148,10 @@ def spotify_callback(request):
     if token_resp.status_code >= 400:
         return JsonResponse(
             {
+                "ok": False,
                 "error": "spotify_token_exchange_failed",
                 "status_code": token_resp.status_code,
-                "response": token_resp.text,
+                "message": token_resp.text,
             },
             status=502,
         )
@@ -146,7 +162,9 @@ def spotify_callback(request):
     expires_in = token_data.get("expires_in")
 
     if not access_token or not refresh_token or not expires_in:
-        return JsonResponse({"error": "invalid_token_response"}, status=502)
+        return JsonResponse(
+            {"ok": False, "error": "invalid_token_response"}, status=502
+        )
 
     profile_resp = httpx.get(
         "https://api.spotify.com/v1/me",
@@ -155,16 +173,19 @@ def spotify_callback(request):
     if profile_resp.status_code >= 400:
         return JsonResponse(
             {
+                "ok": False,
                 "error": "spotify_profile_fetch_failed",
                 "status_code": profile_resp.status_code,
-                "response": profile_resp.text,
+                "message": profile_resp.text,
             },
             status=502,
         )
 
     spotify_user_id = profile_resp.json().get("id")
     if not spotify_user_id:
-        return JsonResponse({"error": "invalid_spotify_profile"}, status=502)
+        return JsonResponse(
+            {"ok": False, "error": "invalid_spotify_profile"}, status=502
+        )
 
     User = get_user_model()
     username = f"spotify_{spotify_user_id}"[:150]
