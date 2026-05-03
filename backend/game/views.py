@@ -31,6 +31,7 @@ def spotify_login(request):
         "redirect_uri": settings.SPOTIFY_REDIRECT_URI,
         "scope": SCOPES,
         "state": state,
+        "show_dialog": "true",
     }
     url = SPOTIFY_AUTH_URL + "?" + urlencode(params)
     return redirect(url)
