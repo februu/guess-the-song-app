@@ -30,14 +30,35 @@ ws://localhost:8000
 
 ## HTTP Requests
 
+All requests must include `credentials: "include"` so the browser sends the session cookie.
+
 **GET** _/spotify/login_
 
-Redirects user to a spotify login page and creates new session.
+Redirects the browser through the Spotify OAuth flow. After the user grants access, the backend creates a session and redirects to the frontend (`FRONTEND_URL`). On failure the frontend receives `FRONTEND_URL/?auth_error=<reason>`.
+
+**GET** _/spotify/profile_
+
+Returns the logged-in user's Spotify profile. Use this to check whether the user is authenticated — 401 means not logged in.
 
 ```json
 {
-  "ok": true, 
-  "spotify_connected": true
+  "ok": true,
+  "profile": {
+    "id": "spotify_user_id",
+    "display_name": "John Doe",
+    "profile_image_url": "https://i.scdn.co/image/ab6775700000ee85example"
+  }
+}
+```
+
+**GET** _/spotify/logout_
+
+Clears the session and deletes the user.
+
+```json
+{
+  "ok": true,
+  "spotify_disconnected": true
 }
 ```
 

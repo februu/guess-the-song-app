@@ -3,7 +3,7 @@ import secrets
 from urllib.parse import urlencode
 
 import httpx
-from django.contrib.auth import get_user_model, login
+from django.contrib.auth import get_user_model, login, logout
 from django.conf import settings
 from django.core.cache import cache
 from django.http import JsonResponse
@@ -40,8 +40,9 @@ def spotify_login(request):
 def spotify_logout(request):
     if request.user.is_authenticated:
         SpotifyToken.objects.filter(user=request.user).delete()
-        request.user.auth_token.delete()
-        request.user.delete()
+        user = request.user
+        logout(request)
+        user.delete()
     return JsonResponse({"ok": True, "spotify_disconnected": True})
 
 
@@ -121,25 +122,20 @@ def spotify_user_profile(request):
 
 @require_GET
 def spotify_callback(request):
+    frontend_url = settings.FRONTEND_URL
+
     if request.GET.get("error"):
-        return JsonResponse(
-            {
-                "ok": False,
-                "error": "spotify_authorization_failed",
-                "message": request.GET.get("error"),
-            },
-            status=400,
-        )
+        return redirect(f"{frontend_url}?auth_error={request.GET.get('error')}")
 
     code = request.GET.get("code")
     state = request.GET.get("state")
 
     if not code or not state:
-        return JsonResponse({"ok": False, "error": "missing_code_or_state"}, status=400)
+        return redirect(f"{frontend_url}?auth_error=missing_code_or_state")
 
     state_exists = cache.get(f"spotify_state_{state}")
     if not state_exists:
-        return JsonResponse({"ok": False, "error": "invalid_state"}, status=400)
+        return redirect(f"{frontend_url}?auth_error=invalid_state")
 
     cache.delete(f"spotify_state_{state}")
 
@@ -155,15 +151,7 @@ def spotify_callback(request):
     )
 
     if token_resp.status_code >= 400:
-        return JsonResponse(
-            {
-                "ok": False,
-                "error": "spotify_token_exchange_failed",
-                "status_code": token_resp.status_code,
-                "message": token_resp.text,
-            },
-            status=502,
-        )
+        return redirect(f"{frontend_url}?auth_error=token_exchange_failed")
 
     token_data = token_resp.json()
     access_token = token_data.get("access_token")
@@ -171,35 +159,23 @@ def spotify_callback(request):
     expires_in = token_data.get("expires_in")
 
     if not access_token or not refresh_token or not expires_in:
-        return JsonResponse(
-            {"ok": False, "error": "invalid_token_response"}, status=502
-        )
+        return redirect(f"{frontend_url}?auth_error=invalid_token_response")
 
     profile_resp = httpx.get(
         "https://api.spotify.com/v1/me",
         headers={"Authorization": f"Bearer {access_token}"},
     )
     if profile_resp.status_code >= 400:
-        return JsonResponse(
-            {
-                "ok": False,
-                "error": "spotify_profile_fetch_failed",
-                "status_code": profile_resp.status_code,
-                "message": profile_resp.text,
-            },
-            status=502,
-        )
+        return redirect(f"{frontend_url}?auth_error=profile_fetch_failed")
 
     spotify_user_id = profile_resp.json().get("id")
     if not spotify_user_id:
-        return JsonResponse(
-            {"ok": False, "error": "invalid_spotify_profile"}, status=502
-        )
+        return redirect(f"{frontend_url}?auth_error=invalid_spotify_profile")
 
     User = get_user_model()
     username = f"spotify_{spotify_user_id}"[:150]
-    user, _ = User.objects.get_or_create(username=username)
-    if user.has_usable_password():
+    user, created = User.objects.get_or_create(username=username)
+    if created:
         user.set_unusable_password()
         user.save(update_fields=["password"])
 
@@ -214,4 +190,4 @@ def spotify_callback(request):
         },
     )
 
-    return JsonResponse({"ok": True, "spotify_connected": True})
+    return redirect(frontend_url)
