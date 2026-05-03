@@ -8,6 +8,7 @@ dependencies = [
     "channels-redis>=4.3.0",
     "channels[daphne]>=4.3.2",
     "django>=6.0.3",
+    "django-cors-headers>=4.9.0",
     "httpx>=0.28.1",
     "python-dotenv>=1.2.2",
     "yt-dlp>=2026.3.17",
