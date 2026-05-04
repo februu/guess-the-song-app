@@ -2,7 +2,7 @@
 import json
 
 from channels.generic.websocket import AsyncWebsocketConsumer
-from .managers.room import (
+from .game.room import (
     RoomCodeGenerationFailed,
     RoomCodeInvalid,
     RoomManager,
