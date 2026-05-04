@@ -67,14 +67,24 @@ class RoomManager:
             await self.broadcast_room_state(room_code, channel_layer)
         await channel_layer.group_discard(f"layer:{room_code}", channel_name)
 
-    async def start_room(self, room_code, channel_name, channel_layer):
-        """Starts the game in the room, only allowed for the host. Broadcasts the updated room state to all members after starting."""
+    async def start_room(self, room_code, channel_name, channel_layer, user):
+        """
+        Starts the game: validates the host, marks the room as started,
+        broadcasts the updated state, then hands off to the GameManager
+        to kick off the actual game loop.
+        """
         room = await self._get_room(room_code)
         if room.host_channel != channel_name:
             raise RoomPermissionDenied("Only the host can start the room")
         room.started = True
         await self._set_room(room_code, room)
         await self.broadcast_room_state(room_code, channel_layer)
+        await self.broadcast(room_code, "room.started", {}, channel_layer)
+
+        # Late import to avoid circular dependency between manager.py and room.py.
+        from .manager import gm
+
+        await gm.start_game(room_code, channel_layer, user)
 
     async def broadcast(
         self, room_code: str, event_type: str, payload: dict, channel_layer

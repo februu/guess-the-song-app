@@ -1,16 +1,20 @@
 # game/consumers.py
+import base64
 import json
 
 from channels.generic.websocket import AsyncWebsocketConsumer
-from .game.room import (
+from .game.room import RoomManager
+from .game.manager import gm
+from .game.exceptions import (
     RoomCodeGenerationFailed,
     RoomCodeInvalid,
-    RoomManager,
     RoomNotFound,
     RoomAlreadyStarted,
     RoomPermissionDenied,
     RoundsInvalid,
     UserNameInvalid,
+    GameAlreadyRunning,
+    NoTracksAvailable,
 )
 
 rm = RoomManager()
@@ -38,6 +42,7 @@ class GameConsumer(AsyncWebsocketConsumer):
                 )
             except RoomNotFound:
                 pass
+            gm.player_left(self.room_code, self.channel_name)
 
     async def receive(self, text_data=None, bytes_data=None):
         if text_data is None:
@@ -151,18 +156,37 @@ class GameConsumer(AsyncWebsocketConsumer):
             await self.send_error("not_in_room", "Not in a room")
             return
         try:
-            await rm.start_room(self.room_code, self.channel_name, self.channel_layer)
+            await rm.start_room(
+                self.room_code,
+                self.channel_name,
+                self.channel_layer,
+                self.scope.get("user"),
+            )
         except RoomNotFound as e:
             await self.send_error("room_not_found", str(e))
-            return
         except RoomPermissionDenied as e:
             await self.send_error("permission_denied", str(e))
-            return
+        except GameAlreadyRunning as e:
+            await self.send_error("game_already_running", str(e))
+        except NoTracksAvailable as e:
+            await self.send_error("no_tracks", str(e))
 
     # song.guess
     async def on_song_guess(self, data):
-        # TODO: implement song guessing logic
-        pass
+        if self.room_code is None:
+            await self.send_error("not_in_room", "Not in a room")
+            return
+        if "guess" not in data or not isinstance(data["guess"], str):
+            await self.send_error("missing_guess", "Missing guess")
+            return
+        if len(data["guess"]) >= 100:
+            await self.send_error(
+                "guess_too_long", "Guess must be less than 100 characters"
+            )
+            return
+        await gm.submit_guess(
+            self.room_code, self.channel_name, data["guess"], self.channel_layer
+        )
 
     # ------------------------------- #
     #         Channel Layer           #
@@ -172,3 +196,8 @@ class GameConsumer(AsyncWebsocketConsumer):
     async def room_event(self, event):
         """Handles all broadcast events from the channel layer."""
         await self.send_message(event["event_type"], event["payload"])
+
+    # audio_chunk
+    async def audio_chunk(self, event):
+        """Forwards raw PCM audio chunks to the client as binary WebSocket frames."""
+        await self.send(bytes_data=base64.b64decode(event["data"]))

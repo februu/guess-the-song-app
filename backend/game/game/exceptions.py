@@ -24,3 +24,11 @@ class RoundsInvalid(Exception):
 
 class RoomPermissionDenied(Exception):
     pass
+
+
+class GameAlreadyRunning(Exception):
+    pass
+
+
+class NoTracksAvailable(Exception):
+    pass
