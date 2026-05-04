@@ -1,7 +1,26 @@
 from dataclasses import asdict, dataclass, field
+from difflib import SequenceMatcher
 import json
+import re
 import asyncio
 import time
+
+_FILLER_WORDS = frozenset({"feat", "ft", "featuring", "the", "a", "an"})
+_FUZZY_THRESHOLD = 0.8
+
+
+def _normalize_tokens(text: str) -> list[str]:
+    """Converts text to a list of normalized tokens for matching guesses to answers."""
+    text = re.sub(r"[\(\[].*?[\)\]]", "", text)
+    text = re.sub(r"[^\w\s']", " ", text)
+    return [w for w in text.lower().split() if w not in _FILLER_WORDS]
+
+
+def _token_matches(answer_token: str, guess_token: str) -> bool:
+    """Returns True if the answer token matches the guess token, allowing for some fuzziness."""
+    if len(answer_token) <= 3:
+        return answer_token == guess_token
+    return SequenceMatcher(None, answer_token, guess_token).ratio() >= _FUZZY_THRESHOLD
 
 
 @dataclass
@@ -78,8 +97,9 @@ class RoundState:
         # The correct answer for this round {"id", "name", "artists": [...]}
         self.track = track
 
-        # Pre-computed lowercased answer and artist names
+        # Pre-computed lowercased answer and normalized tokens for matching
         self._answer = track["name"].lower()
+        self._answer_tokens = _normalize_tokens(track["name"])
 
         # channel_names → monotonic_timestamps. Only CORRECT guesses should be recorded.
         self.correct_guesses_times: dict[str, float] = {}
@@ -97,12 +117,12 @@ class RoundState:
         self._active_players: set[str] = set(player_channels)
 
     def _is_correct(self, guess: str) -> bool:
-        """
-        Returns True if the guess is correct, False otherwise.
-        """
-        g = guess.lower()
-        # TODO: Add fuzzy matching to allow for minor typos, ignore common words like "the", "feat.", etc. and everything in parentheses, etc.
-        return self._answer in g
+        guess_tokens = _normalize_tokens(guess)
+        if not self._answer_tokens:
+            return True
+        return all(
+            any(_token_matches(a, g) for g in guess_tokens) for a in self._answer_tokens
+        )
 
     def record_guess(self, channel_name: str, guess: str) -> bool:
         """
