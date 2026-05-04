@@ -190,11 +190,11 @@ _Returned to a client after host sent_ **song.guess** _if the guess was correct.
 
 _Returned to a client after host sent_ **song.guess** _if the guess was incorrect._
 
-**room.round_started**
+**round.started**
 
 _Returned to all clients signifying beginning of the next round. Packets with music will be delivered shortly. Round clock timer can be started from this point (~30 seconds?)._
 
-**room.round_ended**
+**round.ended**
 
 _Returned to all clients signifying ending of the current round. Round end clock timer can be started from this point (~10 seconds?). Contains info about amount of earned points this round and metadata of the song that was playing this round to display._
 
