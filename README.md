@@ -124,6 +124,14 @@ _Creates a new room, sets a playlist, amount of rounds and adds a user as a host
 - 1 <=`rounds` <= 20
 - `playlistid` must be a valid spotify playlist.
 
+**room.ready**
+
+_Toggles the calling player's ready status. Broadcasts an updated_ **room.updated** _state to all members._
+
+```json
+{}
+```
+
 **room.start**
 
 _Starts the game for all players._
@@ -155,6 +163,7 @@ _Returned to a client with current game state. The State object will have always
     "code": "ABCDEF",
     "host_name": "alice",
     "members": ["alice", "bob", "charlie"],
+    "ready_players": ["alice", "bob"],
     "scoreboard": {
       "alice": 15,
       "bob": 10,

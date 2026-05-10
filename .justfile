@@ -5,3 +5,7 @@ default:
 
 migrate:
     docker compose -f dev.docker-compose.yml run --rm backend uv run sh -c 'python manage.py makemigrations game && python manage.py migrate'
+
+test:
+    docker compose -f dev.docker-compose.yml up -d redis
+    docker compose -f dev.docker-compose.yml run --rm backend uv run --group test pytest

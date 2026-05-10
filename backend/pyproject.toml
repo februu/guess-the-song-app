@@ -13,3 +13,20 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "yt-dlp>=2026.3.17",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+test = [
+    "pytest>=8.0",
+    "pytest-django>=4.9",
+    "pytest-asyncio>=0.25",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings_test"
+asyncio_mode = "auto"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

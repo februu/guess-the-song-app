@@ -26,6 +26,7 @@ class GameConsumer(AsyncWebsocketConsumer):
         return {
             "room.create": self.on_room_create,
             "room.join": self.on_room_join,
+            "room.ready": self.on_room_ready,
             "room.start": self.on_room_start,
             "song.guess": self.on_song_guess,
         }
@@ -149,6 +150,18 @@ class GameConsumer(AsyncWebsocketConsumer):
             await self.send_error("room_started", str(e))
             return
         self.room_code = code
+
+    # room.ready
+    async def on_room_ready(self, data):
+        if self.room_code is None:
+            await self.send_error("not_in_room", "Not in a room")
+            return
+        try:
+            await rm.set_player_ready(self.room_code, self.channel_name, self.channel_layer)
+        except RoomNotFound as e:
+            await self.send_error("room_not_found", str(e))
+        except RoomAlreadyStarted as e:
+            await self.send_error("room_started", str(e))
 
     # room.start
     async def on_room_start(self, data):

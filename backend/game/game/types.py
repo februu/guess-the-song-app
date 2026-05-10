@@ -40,6 +40,7 @@ class RoomState:
     playlist_name: str = ""  # name of the playlist
     playlist_img: str = ""  # URL of the playlist image
     started: bool = False  # whether the game has started or not
+    ready_players: list = field(default_factory=list)  # channel_names of players who marked themselves ready
 
     def to_json(self) -> str:
         return json.dumps(asdict(self))
@@ -62,6 +63,7 @@ class PublicRoomState:
     started: bool = False  # whether the game has started or not
     rounds: int = 0  # number of rounds to play in the game
     current_round: int = 0  # the current round number (starting from 0)
+    ready_players: list = field(default_factory=list)  # usernames of players who marked themselves ready
 
     def to_json(self) -> str:
         return json.dumps(asdict(self))
@@ -84,6 +86,9 @@ class PublicRoomState:
             playlist_img=room.playlist_img,
             rounds=room.rounds,
             current_round=room.current_round,
+            ready_players=[
+                room.members[ch] for ch in room.ready_players if ch in room.members
+            ],
         )
 
 

@@ -256,7 +256,7 @@ class GameManager:
                 if not chunk:
                     break
                 await channel_layer.group_send(
-                    f"layer:{room_code}",
+                    f"layer_{room_code}",
                     {
                         "type": "audio_chunk",
                         "data": base64.b64encode(chunk).decode(),

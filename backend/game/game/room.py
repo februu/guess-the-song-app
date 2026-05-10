@@ -37,12 +37,12 @@ class RoomManager:
             playlist_id=playlist_id,
         )
         await self._set_room(room_code, room)
-        await channel_layer.group_add(f"layer:{room_code}", channel_name)
+        await channel_layer.group_add(f"layer_{room_code}", channel_name)
         return room_code
 
     async def join_room(self, room_code, channel_name, channel_layer, username: str):
         """Joins an existing room. Broadcasts the updated room state to all members after joining."""
-        self._validate_room_code(room_code.upper())
+        self._validate_room_code(room_code)
         self._validate_user_name(username)
         room = await self._get_room(room_code)
         if room.started:
@@ -51,13 +51,29 @@ class RoomManager:
             raise UserNameInvalid("Username already taken in this room")
         room.members[channel_name] = username
         await self._set_room(room_code, room)
-        await channel_layer.group_add(f"layer:{room_code}", channel_name)
+        await channel_layer.group_add(f"layer_{room_code}", channel_name)
+        await self.broadcast_room_state(room_code, channel_layer)
+
+    async def set_player_ready(self, room_code, channel_name, channel_layer):
+        """Toggles a player's ready status and broadcasts the updated room state."""
+        room = await self._get_room(room_code)
+        if room.started:
+            raise RoomAlreadyStarted("Cannot change ready status after the game has started")
+        if channel_name not in room.members:
+            raise RoomNotFound("Player is not in this room")
+        if channel_name in room.ready_players:
+            room.ready_players.remove(channel_name)
+        else:
+            room.ready_players.append(channel_name)
+        await self._set_room(room_code, room)
         await self.broadcast_room_state(room_code, channel_layer)
 
     async def leave_room(self, room_code, channel_name, channel_layer):
         """Leaves a room, deleting it if the last member leaves. Broadcasts the updated room state to remaining members after leaving."""
         room = await self._get_room(room_code)
         room.members.pop(channel_name, None)
+        if channel_name in room.ready_players:
+            room.ready_players.remove(channel_name)
         if not room.members:
             await self._delete_room(room_code)
         else:
@@ -65,7 +81,7 @@ class RoomManager:
                 room.host_channel = next(iter(room.members))
             await self._set_room(room_code, room)
             await self.broadcast_room_state(room_code, channel_layer)
-        await channel_layer.group_discard(f"layer:{room_code}", channel_name)
+        await channel_layer.group_discard(f"layer_{room_code}", channel_name)
 
     async def start_room(self, room_code, channel_name, channel_layer, user):
         """
@@ -91,7 +107,7 @@ class RoomManager:
     ):
         """Broadcasts a message to all members of the room."""
         await channel_layer.group_send(
-            f"layer:{room_code}",
+            f"layer_{room_code}",
             {"type": "room_event", "event_type": event_type, "payload": payload},
         )
 
@@ -143,25 +159,21 @@ class RoomManager:
             "Failed to generate a unique room code after 100 attempts"
         )
 
-    @sync_to_async
-    def _reserve_code(self, code: str) -> bool:
+    async def _reserve_code(self, code: str) -> bool:
         """Returns True if the code was successfully reserved, False if already taken."""
-        return cache.add(f"room:{code}", {})
+        return await sync_to_async(cache.add)(f"room:{code}", {})
 
-    @sync_to_async
-    def _get_room(self, code: str) -> RoomState:
+    async def _get_room(self, code: str) -> RoomState:
         """Retrieves room data by code, or raises RoomNotFound if not found."""
-        data = cache.get(f"room:{code}")
+        data = await sync_to_async(cache.get)(f"room:{code}")
         if not data:
             raise RoomNotFound("Room with this code does not exist")
         return RoomState.from_json(data)
 
-    @sync_to_async
-    def _set_room(self, code: str, room: RoomState):
+    async def _set_room(self, code: str, room: RoomState) -> None:
         """Saves the room state to the cache."""
-        cache.set(f"room:{code}", room.to_json(), timeout=ROOM_TTL)
+        await sync_to_async(cache.set)(f"room:{code}", room.to_json(), timeout=ROOM_TTL)
 
-    @sync_to_async
-    def _delete_room(self, code: str):
+    async def _delete_room(self, code: str) -> None:
         """Deletes a room by code."""
-        cache.delete(f"room:{code}")
+        await sync_to_async(cache.delete)(f"room:{code}")
