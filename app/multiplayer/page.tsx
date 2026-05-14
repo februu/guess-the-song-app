@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
+import { Suspense } from "react";
+import { MultiplayerShell } from "./_components/MultiplayerShell";
 
 export default function MultiplayerPage() {
-
   return (
-    <main className="min-h-screen flex justify-center pt-6">
-
-
-    </main>
-  )
+    <Suspense>
+      <MultiplayerShell />
+    </Suspense>
+  );
 }
