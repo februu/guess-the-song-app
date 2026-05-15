@@ -47,7 +47,6 @@ export default function Home() {
               >
                 <div className="flex items-center justify-between w-full">
                   <h2 className="text-xl font-black tracking-wide">SOLO</h2>
-                  <span className="text-2xl">🎵</span>
                 </div>
                 <div className="w-full h-0.5 bg-gradient-to-r from-green-500/60 via-green-500/20 to-transparent -mt-2" />
                 <p className="text-xs opacity-50 leading-relaxed">
@@ -68,7 +67,6 @@ export default function Home() {
               >
                 <div className="flex items-center justify-between w-full">
                   <h2 className="text-xl font-black tracking-wide">MULTIPLAYER</h2>
-                  <span className="text-2xl">👥</span>
                 </div>
                 <div className="w-full h-0.5 bg-gradient-to-r from-green-500/60 via-green-500/20 to-transparent -mt-2" />
                 <p className="text-xs opacity-50 leading-relaxed">
