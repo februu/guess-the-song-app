@@ -1,12 +1,13 @@
 // ─── Outgoing (client → server) ───────────────────────────────────────────────
 
-// Data needed to create a room or join a room, sent from the client to the server via WebSocket messages.
 export interface CreateRoomPayload {
   name: string;
   playlist_id: string;
+  playlist_name: string;
+  playlist_img: string;  // ← dodaj
   rounds: number;
 }
-// Data needed to join a room, sent from the client to the server via WebSocket messages.
+
 export interface JoinRoomPayload {
   name: string;
   code: string;
@@ -14,9 +15,12 @@ export interface JoinRoomPayload {
 
 export type ClientMessage =
   | { type: "room.create"; data: CreateRoomPayload }
-  | { type: "room.join";   data: JoinRoomPayload };
+  | { type: "room.join";   data: JoinRoomPayload }
+  | { type: "room.ready";  data: Record<string, never> }
+  | { type: "room.start";  data: Record<string, never> }
+  | { type: "song.guess";  data: { guess: string } };
 
-// ─── Incoming (server → client) ───────────────────────────────────────────────
+// ─── Room state (from backend) ────────────────────────────────────────────────
 
 export interface RoomState {
   code: string;
@@ -28,24 +32,30 @@ export interface RoomState {
   started: boolean;
   rounds: number;
   current_round: number;
+  ready_players: string[];
 }
 
 export interface SongResult {
   points: number;
   title: string;
   artist: string;
-  img: string;
+  img: string | null;
 }
 
+// ─── Incoming (server → client) ───────────────────────────────────────────────
+
 export type ServerMessage =
-  | { type: "room.updated";       ok: true;  data: { state: RoomState } }
-  | { type: "room.started";       ok: true;  data: Record<string, never> }
-  | { type: "room.ended";         ok: true;  data: { state: RoomState } }
-  | { type: "room.round_started"; ok: true;  data: Record<string, never> }
-  | { type: "room.round_ended";   ok: true;  data: SongResult }
-  | { type: "song.correct";       ok: true;  data: SongResult }
-  | { type: "song.incorrect";     ok: true;  data: Record<string, never> }
-  | { type: "error";              ok: false; error: { code: string; message: string } };
+  | { ok: true;  type: "room.updated";       data: { state: RoomState } }
+  | { ok: true;  type: "room.started";       data: Record<string, never> }
+  | { ok: true;  type: "room.ended";         data: { state: RoomState } }
+  | { ok: true;  type: "round.started";      data: { round: number; total_rounds: number; duration: number } }
+  | { ok: true;  type: "round.ended";        data: SongResult }
+  | { ok: true;  type: "round.audio_config"; data: { sampleRate: number; channels: number } }
+  | { ok: true;  type: "round.audio_stop";   data: Record<string, never> }
+  | { ok: true;  type: "round.audio_end";    data: Record<string, never> }
+  | { ok: true;  type: "song.correct";       data: SongResult }
+  | { ok: true;  type: "song.incorrect";     data: Record<string, never> }
+  | { ok: false; type?: string; error: { code: string; message: string } };
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 

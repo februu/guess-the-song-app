@@ -1,0 +1,77 @@
+import type { ServerMessage, ClientMessage } from "../api/messages";
+
+const WS_URL = process.env.NEXT_PUBLIC_BACKEND_WS_URL ?? "ws://127.0.0.1:8000";
+
+type MessageHandler = (msg: ServerMessage) => void;
+type BinaryHandler = (data: ArrayBuffer) => void;
+
+class GameWebSocket {
+  private ws: WebSocket | null = null;
+  private handlers: Set<MessageHandler> = new Set();
+  private binaryHandlers: Set<BinaryHandler> = new Set();
+
+  connect(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        resolve();
+        return;
+      }
+
+      this.ws = new WebSocket(`${WS_URL}/ws/game/`);
+      this.ws.binaryType = "arraybuffer"; 
+
+      this.ws.onopen = () => resolve();
+      this.ws.onerror = () => reject(new Error("WebSocket connection failed"));
+
+      this.ws.onmessage = (event) => {
+        if (typeof event.data === "string") {
+          try {
+            const msg = JSON.parse(event.data) as ServerMessage;
+            this.handlers.forEach((h) => h(msg));
+          } catch {
+            // ignore malformed messages
+          }
+        } else if (event.data instanceof ArrayBuffer) {
+          this.binaryHandlers.forEach((h) => h(event.data as ArrayBuffer));
+        }
+      };
+
+      this.ws.onclose = () => {
+        this.ws = null;
+      };
+    });
+  }
+
+  disconnect() {
+    this.ws?.close();
+    this.ws = null;
+    this.handlers.clear();
+    this.binaryHandlers.clear();
+  }
+
+send(msg: ClientMessage) {
+  if (this.ws?.readyState === WebSocket.OPEN) {
+    const { type, data } = msg as { type: string; data: Record<string, unknown> };
+    const payload = JSON.stringify({ type, ...data });
+    console.log("WS send:", payload);  // ← dodaj to
+    this.ws.send(payload);
+  }
+}
+
+  onMessage(handler: MessageHandler): () => void {
+    this.handlers.add(handler);
+    return () => this.handlers.delete(handler);
+  }
+
+  onBinary(handler: BinaryHandler): () => void {
+    this.binaryHandlers.add(handler);
+    return () => this.binaryHandlers.delete(handler);
+  }
+
+  isConnected(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+}
+
+// Module-level singleton — one WS connection for the whole app
+export const gameWS = new GameWebSocket();
