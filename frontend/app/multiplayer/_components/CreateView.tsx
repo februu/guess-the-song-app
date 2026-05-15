@@ -10,37 +10,59 @@ import {
   type SpotifyPlaylist,
   type SpotifyProfile,
 } from "@/lib/spotify";
-import { buildClientMessage } from "@/lib/api/messages";
+import { gameWS } from "@/lib/ws/client";
+import type { RoomState } from "@/lib/api/messages";
 
 import { UserProfileCard } from "./UserProfileCard";
 import { PlaylistRow } from "./PlaylistRow";
 
 const isValidName = (v: string) => /^[a-zA-Z0-9_]{3,20}$/.test(v);
 
-type Step = "connect" | "pick-playlist" | "configure";
+export type CreateStep = "connect" | "pick-playlist" | "configure";
 
-// Module-level flags — survive React Strict Mode unmount/remount cycles
 let userLoggedOut = false;
 let sessionLoadStarted = false;
 
-export function CreateView() {
-  const router = useRouter();
-  const [step, setStep] = useState<Step>("connect");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+function SpotifyIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+    </svg>
+  );
+}
 
-  const [profile, setProfile] = useState<SpotifyProfile | null>(null);
-  const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
+interface Props {
+  initialStep?: CreateStep;
+  onStepChange?: (step: CreateStep) => void;
+}
+
+export function CreateView({ initialStep, onStepChange }: Props) {
+  const router = useRouter();
+
+  const [step, setStepInternal] = useState<CreateStep>(initialStep ?? "connect");
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");
+
+  const [profile,          setProfile]          = useState<SpotifyProfile | null>(null);
+  const [playlists,        setPlaylists]        = useState<SpotifyPlaylist[]>([]);
   const [selectedPlaylist, setSelectedPlaylist] = useState<SpotifyPlaylist | null>(null);
 
-  const [nickname, setNickname] = useState("");
-  const [rounds, setRounds] = useState(10);
+  const [nickname,  setNickname]  = useState("");
+  const [rounds,    setRounds]    = useState(10);
   const [nameError, setNameError] = useState("");
+  const [creating,  setCreating]  = useState(false);
 
-  // On mount 
+  function setStep(s: CreateStep) {
+    setStepInternal(s);
+    onStepChange?.(s);
+  }
+
+  // Sync when parent changes initialStep (e.g. Back button)
   useEffect(() => {
-     console.log("useEffect fired, sessionLoadStarted:", sessionLoadStarted);
-    // Prevent double execution from React Strict Mode
+    if (initialStep) setStepInternal(initialStep);
+  }, [initialStep]);
+
+  useEffect(() => {
     if (sessionLoadStarted) return;
     sessionLoadStarted = true;
 
@@ -49,7 +71,6 @@ export function CreateView() {
 
     if (isPostLogin) {
       userLoggedOut = false;
-      // Clean URL immediately — synchronously before any async work
       window.history.replaceState({}, "", "/multiplayer");
       loadSpotifyData(false);
     } else {
@@ -58,25 +79,16 @@ export function CreateView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Data loader 
   async function loadSpotifyData(silent: boolean) {
     if (silent && userLoggedOut) return;
-
     try {
       if (!silent) setLoading(true);
       setError("");
-
       const session = await tryLoadSpotifySession();
-      if (!session) {
-        setStep("connect");
-        return;
-      }
-
+      if (!session) { setStep("connect"); return; }
       setProfile(session.profile);
       setPlaylists(session.playlists);
-      setNickname(
-        session.profile.display_name?.replace(/\W/g, "_").slice(0, 20) ?? ""
-      );
+      setNickname(session.profile.display_name?.replace(/\W/g, "_").slice(0, 20) ?? "");
       setStep("pick-playlist");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load Spotify data");
@@ -86,117 +98,124 @@ export function CreateView() {
     }
   }
 
-  //  Logout 
-  async function handleLogout() {
-    console.log("handleLogout called");
-    userLoggedOut = true;
-    sessionLoadStarted = false; // allow fresh load after next login
-    try {
-      await spotifyLogout();
-    } catch {
-      // best-effort
-    }
-    setProfile(null);
-    setPlaylists([]);
-    setSelectedPlaylist(null);
-    setNickname("");
-    setStep("connect");
-  }
-
-  
-  function handleStart() {
-    if (!isValidName(nickname)) {
-      setNameError("3–20 chars, letters, numbers or underscores only");
-      return;
-    }
-    if (!selectedPlaylist) {
-      setError("Select a playlist first");
-      return;
-    }
-
-    // TODO: pass playlist id + rounds + nickname to game
-    console.log("Starting multiplayer:", { nickname, playlist_id: selectedPlaylist.id, rounds });
-    router.push("/game?mode=multiplayer");
-  }
-
   function handlePlaylistSelect(p: SpotifyPlaylist) {
     setSelectedPlaylist(p);
+    if (p.track_count && rounds > p.track_count) setRounds(p.track_count);
     setStep("configure");
   }
 
-function handleCreate() {
-  if (!isValidName(nickname)) {
-    setNameError("3–20 chars, letters, numbers or underscores only");
-    return;
+  async function handleLogout() {
+    userLoggedOut = true;
+    sessionLoadStarted = false;
+    try { await spotifyLogout(); } catch { /* best-effort */ }
+    setProfile(null); setPlaylists([]); setSelectedPlaylist(null);
+    setNickname(""); setStep("connect");
   }
 
-  if (!selectedPlaylist) {
-    setError("Select a playlist first");
-    return;
-  }
+  async function handleCreate() {
+    if (!isValidName(nickname)) { setNameError("3–20 chars, letters, numbers or underscores only"); return; }
+    if (!selectedPlaylist) { setError("Select a playlist first"); return; }
 
-  const ws = new WebSocket("ws://localhost:8000/ws/game/");
+    setCreating(true); setError("");
 
-  ws.onopen = () => {
-    ws.send(JSON.stringify({
+    try { await gameWS.connect(); } catch {
+      setError("Could not connect to server"); setCreating(false); return;
+    }
+
+    const unsubscribe = gameWS.onMessage((msg) => {
+      if (!msg.ok) {
+        setError(msg.error?.message ?? "Failed to create room");
+        setCreating(false); unsubscribe(); return;
+      }
+      if (msg.type === "room.updated") {
+        unsubscribe();
+        const state = msg.data.state as RoomState;
+        sessionStorage.setItem("room_state",    JSON.stringify(state));
+        sessionStorage.setItem("my_nickname",   nickname);
+        sessionStorage.setItem("is_host",       "true");
+        sessionStorage.setItem("playlist_name", selectedPlaylist.name);
+        sessionStorage.setItem("playlist_image",selectedPlaylist.image_url ?? "");
+        router.push("/lobby");
+      }
+    });
+
+    gameWS.send({
       type: "room.create",
       data: {
-        username: nickname,
-        playlist_id: selectedPlaylist.id,
+        name:          nickname,
+        playlist_id:   selectedPlaylist.id,
+        playlist_name: selectedPlaylist.name,
+        playlist_img:  selectedPlaylist.image_url ?? "",
         rounds,
       },
-    }));
-  };
+    });
 
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
+    setTimeout(() => {
+      if (creating) { unsubscribe(); setError("Server did not respond, try again"); setCreating(false); }
+    }, 8000);
+  }
 
-    if (msg.type === "room.created") {
-      router.push(`/lobby?code=${msg.data.room_code}`);
-    }
-
-    if (msg.type === "error") {
-      setError(msg.message ?? "Failed to create room");
-    }
-  };
-
-  ws.onerror = () => {
-    setError("WebSocket connection failed");
-  };
-}
-
-  // Render
-
+  // ── CONNECT ───────────────────────────────────────────────────────────────
   if (step === "connect") {
     return (
-      <div className="flex flex-col items-center gap-6 w-full">
-        <p className="text-base font-medium text-center">
-          Connect your Spotify account to load your playlists
-        </p>
+      <div className="w-full flex flex-col items-center gap-4">
+        <div className="w-full rounded-[20px] overflow-hidden border border-black/8 dark:border-white/8">
 
-        <button
-          onClick={() => redirectToSpotifyLogin("/multiplayer")}
-          className="flex items-center gap-2 rounded-xl px-8 py-2 font-semibold text-white text-sm"
-          style={{ background: "#1DB954" }}
-        >
-          Connect Spotify
-        </button>
+          {/* Green header */}
+          <div className="px-6 py-5 flex items-center gap-4" style={{ background: "#1DB954" }}>
+            <div className="w-10 h-10 rounded-full bg-black/10 flex items-center justify-center text-black flex-shrink-0">
+              <SpotifyIcon size={22} />
+            </div>
+            <div className="text-left">
+              <p className="font-black text-black text-base leading-none">Spotify</p>
+              <p className="text-black/50 text-xs mt-0.5">Music streaming</p>
+            </div>
+            <div className="ml-auto w-2 h-2 rounded-full bg-black/20" />
+          </div>
 
-        {loading && <p className="text-xs opacity-50">Loading Spotify…</p>}
-        {error && <p className="text-xs text-red-400 text-center">{error}</p>}
+          {/* Body */}
+          <div className="px-6 py-5 flex flex-col gap-4 bg-[oklch(0.88_0.005_272)] dark:bg-[oklch(0.2403_0.0137_272.76)]">
+            <p className="text-sm opacity-60 leading-relaxed">
+              Connect your Spotify account to browse your playlists and start the game.
+            </p>
+            <button
+              onClick={() => redirectToSpotifyLogin("/multiplayer")}
+              className="flex items-center justify-center gap-2.5 w-full rounded-[10px] px-5 py-3 font-bold text-black text-sm transition-all hover:opacity-90 active:scale-[0.98]"
+              style={{ background: "#1DB954" }}
+            >
+              <SpotifyIcon size={16} />
+              Connect with Spotify
+            </button>
+            {loading && (
+              <div className="flex items-center justify-center gap-2">
+                {[0,1,2].map(i => (
+                  <div key={i} className="w-1.5 h-1.5 rounded-full bg-green-500"
+                    style={{ animation: `bounce 1s ease-in-out ${i * 0.15}s infinite` }} />
+                ))}
+                <span className="text-xs opacity-40 ml-1">Loading playlists…</span>
+              </div>
+            )}
+            {error && <p className="text-xs text-red-400 text-center">{error}</p>}
+          </div>
+        </div>
+
+
+        <style jsx>{`
+          @keyframes bounce {
+            0%, 100% { transform: translateY(0); opacity: 0.4; }
+            50%       { transform: translateY(-4px); opacity: 1; }
+          }
+        `}</style>
       </div>
     );
   }
 
+  // ── PICK PLAYLIST ─────────────────────────────────────────────────────────
   if (step === "pick-playlist") {
     return (
       <div className="flex flex-col gap-3 w-full">
-        {profile && (
-          <UserProfileCard profile={profile} onLogout={handleLogout} />
-        )}
-
+        {profile && <UserProfileCard profile={profile} onLogout={handleLogout} />}
         <p className="text-sm opacity-60">Select a playlist</p>
-
         <div className="rounded-[16px] overflow-y-auto max-h-[320px] bg-[oklch(0.88_0.005_272)] dark:bg-[oklch(0.2403_0.0137_272.76)]">
           {playlists.length > 0 ? (
             playlists.map((p) => (
@@ -211,35 +230,27 @@ function handleCreate() {
             <p className="text-sm opacity-50 p-4">No playlists found</p>
           )}
         </div>
-
         {error && <p className="text-xs text-red-400">{error}</p>}
       </div>
     );
   }
 
-  // step === "configure"
+  // ── CONFIGURE ─────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-4 w-full">
-      {profile && (
-        <UserProfileCard profile={profile} onLogout={handleLogout} />
-      )}
+      {profile && <UserProfileCard profile={profile} onLogout={handleLogout} />}
 
       {selectedPlaylist && (
         <div className="flex items-center gap-3 rounded-[12px] px-4 py-3 bg-[oklch(0.88_0.005_272)] text-gray-800 dark:bg-[oklch(0.2403_0.0137_272.76)] dark:text-white">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={selectedPlaylist.image_url ?? "/playlist-placeholder.png"}
-            alt=""
-            className="w-10 h-10 rounded-[8px] object-cover"
-          />
+          <img src={selectedPlaylist.image_url ?? "/playlist-placeholder.png"} alt="" className="w-10 h-10 rounded-[8px] object-cover" />
           <div>
             <p className="text-sm font-semibold">{selectedPlaylist.name}</p>
-            <p className="text-xs opacity-50">Spotify playlist</p>
+            <p className="text-xs opacity-50">
+              {selectedPlaylist.track_count ? `${selectedPlaylist.track_count} tracks` : "Spotify playlist"}
+            </p>
           </div>
-          <button
-            onClick={() => setStep("pick-playlist")}
-            className="ml-auto text-xs opacity-50 hover:opacity-80 transition-opacity"
-          >
+          <button onClick={() => setStep("pick-playlist")} className="ml-auto text-xs opacity-50 hover:opacity-80 transition-opacity">
             Change
           </button>
         </div>
@@ -259,23 +270,23 @@ function handleCreate() {
       <div className="flex flex-col gap-1">
         <label className="text-xs opacity-50">Rounds: {rounds}</label>
         <input
-          type="range"
-          min={1}
-          max={20}
-          value={rounds}
+          type="range" min={1} max={selectedPlaylist?.track_count || 20} value={rounds}
           onChange={(e) => setRounds(Number(e.target.value))}
           className="accent-green-500"
         />
         <div className="flex justify-between text-xs opacity-30">
-          <span>1</span>
-          <span>20</span>
+          <span>1</span><span>{selectedPlaylist?.track_count || 20}</span>
         </div>
       </div>
 
       {error && <p className="text-xs text-red-400">{error}</p>}
 
-      <button className="play-button mx-auto mt-2" onClick={handleCreate}>
-        Create room!
+      <button
+        className="play-button mx-auto mt-2 disabled:opacity-50"
+        onClick={handleCreate}
+        disabled={creating}
+      >
+        {creating ? "Creating…" : "Create room!"}
       </button>
     </div>
   );
