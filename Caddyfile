@@ -1,0 +1,26 @@
+yourdomain.com {
+
+    # Django Channels WebSocket
+    handle /ws/* {
+        reverse_proxy localhost:8000
+    }
+
+    # Django: Spotify OAuth, callback, admin, static files
+    handle /spotify/* {
+        reverse_proxy localhost:8000
+    }
+    handle /callback* {
+        reverse_proxy localhost:8000
+    }
+    handle /admin/* {
+        reverse_proxy localhost:8000
+    }
+    handle /static/* {
+        reverse_proxy localhost:8000
+    }
+
+    # Next.js frontend (catch-all)
+    handle {
+        reverse_proxy localhost:3000
+    }
+}
