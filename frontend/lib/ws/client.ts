@@ -1,6 +1,16 @@
 import type { ServerMessage, ClientMessage } from "../api/messages";
 
-const WS_URL = process.env.NEXT_PUBLIC_BACKEND_WS_URL ?? "ws://127.0.0.1:8000";
+function getWsBase(): string {
+  if (process.env.NEXT_PUBLIC_BACKEND_WS_URL) return process.env.NEXT_PUBLIC_BACKEND_WS_URL;
+  // In production the Dockerfile bakes NEXT_PUBLIC_API_BASE="" (same-origin via reverse proxy).
+  // Derive the WS URL from the current page origin so wss:// is used automatically with HTTPS.
+  // In dev the var is undefined, so we fall back to the hardcoded local backend port.
+  if (process.env.NEXT_PUBLIC_API_BASE === "" && typeof window !== "undefined") {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.host}`;
+  }
+  return "ws://127.0.0.1:8000";
+}
 
 type MessageHandler = (msg: ServerMessage) => void;
 type BinaryHandler = (data: ArrayBuffer) => void;
@@ -17,7 +27,7 @@ class GameWebSocket {
         return;
       }
 
-      this.ws = new WebSocket(`${WS_URL}/ws/game/`);
+      this.ws = new WebSocket(`${getWsBase()}/ws/game/`);
       this.ws.binaryType = "arraybuffer"; 
 
       this.ws.onopen = () => resolve();
@@ -49,14 +59,12 @@ class GameWebSocket {
     this.binaryHandlers.clear();
   }
 
-send(msg: ClientMessage) {
-  if (this.ws?.readyState === WebSocket.OPEN) {
-    const { type, data } = msg as { type: string; data: Record<string, unknown> };
-    const payload = JSON.stringify({ type, ...data });
-    console.log("WS send:", payload);  // ← dodaj to
-    this.ws.send(payload);
+  send(msg: ClientMessage) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      const { type, data } = msg as { type: string; data: Record<string, unknown> };
+      this.ws.send(JSON.stringify({ type, ...data }));
+    }
   }
-}
 
   onMessage(handler: MessageHandler): () => void {
     this.handlers.add(handler);
