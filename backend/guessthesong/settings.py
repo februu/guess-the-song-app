@@ -10,37 +10,53 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load environment variables from .env file
+load_dotenv(BASE_DIR / ".env")
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-9slpz(!h@&-7qd90ylawobqnku=_271xga#o21ze7hq*yg+_u+"
+SECRET_KEY = os.environ.get("DJANGO_SECRET")
+SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET")
+SPOTIFY_REDIRECT_URI = os.environ.get("SPOTIFY_REDIRECT_URI")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+REDIS_URL = os.environ.get("REDIS_URL")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    FRONTEND_URL.replace("http://", "")
+    .replace("https://", "")
+    .split("/")[0]
+    .split(":")[0],
+    "localhost",
+]
 
 
 # Application definition
 
 INSTALLED_APPS = [
     "daphne",
+    "channels",
+    "corsheaders",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "game",
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -69,6 +85,18 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "guessthesong.wsgi.application"
 ASGI_APPLICATION = "guessthesong.asgi.application"
+
+
+# Channels
+# https://channels.readthedocs.io/en/stable/topics/channel_layers.html
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [REDIS_URL],
+        },
+    },
+}
 
 
 # Database
@@ -117,3 +145,12 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = "static/"
+
+# CORS
+CORS_ALLOWED_ORIGINS = [FRONTEND_URL.split("/")[0] + "//" + FRONTEND_URL.split("/")[2]]
+CORS_ALLOW_CREDENTIALS = True
+
+# Session cookie is sent cross-origin in production (requires HTTPS).
+# In development both services run on localhost so SameSite=Lax already works.
+SESSION_COOKIE_SAMESITE = "None" if not DEBUG else "Lax"
+SESSION_COOKIE_SECURE = not DEBUG

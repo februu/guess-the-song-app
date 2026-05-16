@@ -1,0 +1,226 @@
+# game/consumers.py
+import base64
+import json
+
+from channels.generic.websocket import AsyncWebsocketConsumer
+from .game.room import RoomManager
+from .game.manager import gm
+from .game.exceptions import (
+    RoomCodeGenerationFailed,
+    RoomCodeInvalid,
+    RoomNotFound,
+    RoomAlreadyStarted,
+    RoomPermissionDenied,
+    RoundsInvalid,
+    UserNameInvalid,
+    GameAlreadyRunning,
+    NoTracksAvailable,
+)
+from services.spotify import get_playlist_details
+
+rm = RoomManager()
+
+
+class GameConsumer(AsyncWebsocketConsumer):
+    @property
+    def HANDLERS(self):
+        return {
+            "room.create": self.on_room_create,
+            "room.join": self.on_room_join,
+            "room.ready": self.on_room_ready,
+            "room.start": self.on_room_start,
+            "song.guess": self.on_song_guess,
+        }
+
+    async def connect(self):
+        self.room_code = None
+        await self.accept()
+
+    async def disconnect(self, code):
+        if self.room_code:
+            try:
+                await rm.leave_room(
+                    self.room_code, self.channel_name, self.channel_layer
+                )
+            except RoomNotFound:
+                pass
+            gm.player_left(self.room_code, self.channel_name)
+
+    async def receive(self, text_data=None, bytes_data=None):
+        if text_data is None:
+            return
+        data = json.loads(text_data)
+        handler = self.HANDLERS.get(data.get("type"))
+        if handler is None:
+            await self.send_error("unknown_type", "Unknown type")
+            return
+        await handler(data)
+
+    async def send_error(self, code: str, message: str):
+        await self.send(
+            text_data=json.dumps(
+                {"ok": False, "error": {"code": code, "message": message}}
+            )
+        )
+
+    async def send_message(self, type: str, data: dict):
+        await self.send(text_data=json.dumps({"ok": True, "type": type, "data": data}))
+
+    # ------------------------------- #
+    #            Handlers             #
+    # ------------------------------- #
+
+    # room.create
+    async def on_room_create(self, data):
+        if self.room_code is not None:
+            await self.send_error("already_in_room", "Already in a room")
+            return
+
+        if "playlist_id" not in data or not isinstance(data["playlist_id"], str):
+            await self.send_error("missing_playlist_id", "Missing playlist ID")
+            return
+
+        if "rounds" not in data or not isinstance(data["rounds"], int):
+            await self.send_error("missing_rounds", "Missing rounds")
+            return
+
+        if "name" not in data or not isinstance(data["name"], str):
+            await self.send_error("missing_name", "Missing name")
+            return
+
+        username = data["name"]
+        playlist_id = data["playlist_id"]
+        rounds = data["rounds"]
+
+        try:
+            playlist_details = await get_playlist_details(self.scope.get("user"), playlist_id)
+            room_code = await rm.create_room(
+                self.channel_name,
+                self.channel_layer,
+                username,
+                playlist_id,
+                playlist_details["name"],
+                playlist_details["image_url"],
+                rounds,
+            )
+        except RoomCodeGenerationFailed as e:
+            await self.send_error("create_failed", str(e))
+            return
+        except UserNameInvalid as e:
+            await self.send_error(
+                "invalid_username",
+                str(e),
+            )
+            return
+        except RoundsInvalid as e:
+            await self.send_error(
+                "invalid_rounds",
+                str(e),
+            )
+            return
+        self.room_code = room_code
+        await self.send_message(
+            "room.updated", {"state": (await rm.get_safe_state(room_code)).to_dict()}
+        )
+
+    # room.join
+    async def on_room_join(self, data):
+        if self.room_code is not None:
+            await self.send_error("already_in_room", "Already in a room")
+            return
+
+        if "code" not in data or not isinstance(data["code"], str):
+            await self.send_error("missing_code", "Missing room code")
+            return
+
+        if "name" not in data or not isinstance(data["name"], str):
+            await self.send_error("missing_name", "Missing name")
+            return
+
+        code = data["code"]
+        username = data["name"]
+
+        try:
+            await rm.join_room(code, self.channel_name, self.channel_layer, username)
+        except UserNameInvalid as e:
+            await self.send_error(
+                "invalid_username",
+                str(e),
+            )
+            return
+        except RoomCodeInvalid as e:
+            await self.send_error("invalid_code", str(e))
+            return
+        except RoomNotFound as e:
+            await self.send_error("room_not_found", str(e))
+            return
+        except RoomAlreadyStarted as e:
+            await self.send_error("room_started", str(e))
+            return
+        self.room_code = code
+
+    # room.ready
+    async def on_room_ready(self, data):
+        if self.room_code is None:
+            await self.send_error("not_in_room", "Not in a room")
+            return
+        try:
+            await rm.set_player_ready(
+                self.room_code, self.channel_name, self.channel_layer
+            )
+        except RoomNotFound as e:
+            await self.send_error("room_not_found", str(e))
+        except RoomAlreadyStarted as e:
+            await self.send_error("room_started", str(e))
+
+    # room.start
+    async def on_room_start(self, data):
+        if self.room_code is None:
+            await self.send_error("not_in_room", "Not in a room")
+            return
+        try:
+            await rm.start_room(
+                self.room_code,
+                self.channel_name,
+                self.channel_layer,
+                self.scope.get("user"),
+            )
+        except RoomNotFound as e:
+            await self.send_error("room_not_found", str(e))
+        except RoomPermissionDenied as e:
+            await self.send_error("permission_denied", str(e))
+        except GameAlreadyRunning as e:
+            await self.send_error("game_already_running", str(e))
+        except NoTracksAvailable as e:
+            await self.send_error("no_tracks", str(e))
+
+    # song.guess
+    async def on_song_guess(self, data):
+        if self.room_code is None:
+            await self.send_error("not_in_room", "Not in a room")
+            return
+        if "guess" not in data or not isinstance(data["guess"], str):
+            await self.send_error("missing_guess", "Missing guess")
+            return
+        if len(data["guess"]) >= 100:
+            await self.send_error(
+                "guess_too_long", "Guess must be less than 100 characters"
+            )
+            return
+        await gm.submit_guess(
+            self.room_code, self.channel_name, data["guess"], self.channel_layer
+        )
+
+    # ------------------------------- #
+    #         Channel Layer           #
+    # ------------------------------- #
+
+    # room.event
+    async def room_event(self, event):
+        """Handles all broadcast events from the channel layer."""
+        await self.send_message(event["event_type"], event["payload"])
+
+    # audio_chunk
+    async def audio_chunk(self, event):
+        """Forwards raw PCM audio chunks to the client as binary WebSocket frames."""
+        await self.send(bytes_data=base64.b64decode(event["data"]))
