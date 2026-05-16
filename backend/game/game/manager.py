@@ -1,7 +1,9 @@
 import asyncio
 import base64
 import random
+import time
 
+from channels.exceptions import ChannelFull
 
 from ..services.spotify import get_playlist_tracks
 from ..services.youtube import resolve_youtube_query
@@ -14,9 +16,14 @@ rm = RoomManager()
 ROUND_DURATION = 30  # seconds players have to guess before the round ends automatically
 AUDIO_CLIP_LENGTH = 30  # seconds of audio to stream per round
 ROUND_BREAK = 5  # seconds of downtime between rounds (show scoreboard)
-SAMPLE_RATE = 48000
+SCORE_MAX = 1000  # points awarded for an instant correct guess
+SCORE_MIN = 100  # points awarded for a correct guess at the last possible second
+PREFETCH_TIMEOUT = (
+    15  # max extra seconds to wait for YouTube URL resolution before giving up
+)
+SAMPLE_RATE = 44100
 CHANNELS = 2
-CHUNK = 4096
+CHUNK = 65536
 
 
 class GameManager:
@@ -73,10 +80,9 @@ class GameManager:
         correct = round_state.record_guess(channel_name, guess)
 
         if correct:
-            # rank = how many players got it right before this player (0-indexed).
-            # correct_guesses_times already includes this player, so subtract 1.
-            rank = len(round_state.correct_guesses_times) - 1
-            points = max(100 - rank * 15, 10)
+            elapsed = time.monotonic() - round_state.start_time
+            ratio = max(0.0, min(1.0, elapsed / ROUND_DURATION))
+            points = round(SCORE_MAX - (SCORE_MAX - SCORE_MIN) * ratio)
             round_state.round_scores[channel_name] = points
 
             try:
@@ -88,28 +94,34 @@ class GameManager:
             except RoomNotFound:
                 pass
 
-            await channel_layer.send(
-                channel_name,
-                {
-                    "type": "room_event",
-                    "event_type": "song.correct",
-                    "payload": {
-                        "points": points,
-                        "title": round_state.track["name"],
-                        "artist": ", ".join(round_state.track.get("artists", [])),
-                        "img": round_state.track.get("image_url"),
+            try:
+                await channel_layer.send(
+                    channel_name,
+                    {
+                        "type": "room_event",
+                        "event_type": "song.correct",
+                        "payload": {
+                            "points": points,
+                            "title": round_state.track["name"],
+                            "artist": ", ".join(round_state.track.get("artists", [])),
+                            "img": round_state.track.get("image_url"),
+                        },
                     },
-                },
-            )
+                )
+            except ChannelFull:
+                pass
         else:
-            await channel_layer.send(
-                channel_name,
-                {
-                    "type": "room_event",
-                    "event_type": "song.incorrect",
-                    "payload": {},
-                },
-            )
+            try:
+                await channel_layer.send(
+                    channel_name,
+                    {
+                        "type": "room_event",
+                        "event_type": "song.incorrect",
+                        "payload": {},
+                    },
+                )
+            except ChannelFull:
+                pass
 
     def player_left(self, room_code: str, channel_name: str):
         """
@@ -129,23 +141,50 @@ class GameManager:
             task.cancel()
         self._rounds.pop(room_code, None)
 
+    async def _prefetch_url(self, track: dict) -> tuple[str, float | None] | None:
+        """Resolves the YouTube URL + duration for a track. Returns None on any failure."""
+        query = f"{track['name']} {' '.join(track.get('artists', []))}"
+        try:
+            return await asyncio.wait_for(
+                resolve_youtube_query(query), timeout=PREFETCH_TIMEOUT
+            )
+        except Exception:
+            return None
+
     async def _game_loop(self, room_code: str, channel_layer, tracks: list[dict]):
         """
         The main game loop. Runs one round per track, with a short break
         between rounds. Broadcasts room.ended when all rounds are complete.
         """
         try:
-            await asyncio.sleep(3)  # countdown before the first round starts
+            # Prefetch the first track's URL during the initial countdown so round one
+            # starts immediately without waiting for YouTube resolution.
+            prefetched_url, _ = await asyncio.gather(
+                self._prefetch_url(tracks[0]),
+                asyncio.sleep(ROUND_BREAK),
+            )
+
             for i, track in enumerate(tracks):
                 await self._run_round(
-                    room_code, channel_layer, track, round_number=i + 1
+                    room_code,
+                    channel_layer,
+                    track,
+                    round_number=i + 1,
+                    prefetched_url=prefetched_url,
                 )
+
                 if i < len(tracks) - 1:
-                    await asyncio.sleep(ROUND_BREAK)
+                    # Prefetch the next track's URL while the break is running.
+                    prefetched_url, _ = await asyncio.gather(
+                        self._prefetch_url(tracks[i + 1]),
+                        asyncio.sleep(ROUND_BREAK),
+                    )
         except (asyncio.CancelledError, RoomNotFound):
             return
         finally:
             self._rounds.pop(room_code, None)
+
+        await asyncio.sleep(ROUND_BREAK)
 
         try:
             room = await rm._get_room(room_code)
@@ -159,7 +198,12 @@ class GameManager:
             pass
 
     async def _run_round(
-        self, room_code: str, channel_layer, track: dict, round_number: int
+        self,
+        room_code: str,
+        channel_layer,
+        track: dict,
+        round_number: int,
+        prefetched_url: tuple[str, float | None] | None = None,
     ):
         """
         Runs a single round:
@@ -189,7 +233,9 @@ class GameManager:
         )
 
         stream_task = asyncio.create_task(
-            self._stream_audio(room_code, channel_layer, track)
+            self._stream_audio(
+                room_code, channel_layer, track, prefetched_url=prefetched_url
+            )
         )
 
         # Waits until all players have guessed or the timer runs out.
@@ -212,22 +258,39 @@ class GameManager:
 
         await self._finalize_round(room_code, channel_layer, round_state)
 
-    async def _stream_audio(self, room_code: str, channel_layer, track: dict):
+    async def _stream_audio(
+        self,
+        room_code: str,
+        channel_layer,
+        track: dict,
+        prefetched_url: tuple[str, float | None] | None = None,
+    ):
         """
         Resolves the track to a YouTube audio URL, transcodes it to raw PCM with
         ffmpeg, and streams the result as base64-encoded binary chunks to all players.
+        Seeks to ~25% into the track so intros are skipped, while guaranteeing at
+        least 30 seconds of audio remains.
         """
-        query = f"{track['name']} {' '.join(track.get('artists', []))}"
+        if prefetched_url:
+            url, duration = prefetched_url
+        else:
+            query = f"{track['name']} {' '.join(track.get('artists', []))}"
+            try:
+                url, duration = await resolve_youtube_query(query)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                return
 
-        try:
-            url = await resolve_youtube_query(query)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            return
+        # Seek to 25% of the track, but never so late that less than 30s remains.
+        seek_pos = 0.0
+        if duration:
+            seek_pos = max(0.0, min(duration * 0.25, duration - 30.0))
 
         ffmpeg = await asyncio.create_subprocess_exec(
             "ffmpeg",
+            "-ss",
+            str(seek_pos),
             "-i",
             url,
             "-f",
@@ -256,18 +319,23 @@ class GameManager:
                 chunk = await ffmpeg.stdout.read(CHUNK)
                 if not chunk:
                     break
-                await channel_layer.group_send(
-                    f"layer_{room_code}",
-                    {
-                        "type": "audio_chunk",
-                        "data": base64.b64encode(chunk).decode(),
-                    },
-                )
+                try:
+                    await channel_layer.group_send(
+                        f"layer_{room_code}",
+                        {
+                            "type": "audio_chunk",
+                            "data": base64.b64encode(chunk).decode(),
+                        },
+                    )
+                except ChannelFull:
+                    # channel saturated — skip this chunk rather than crash
+                    await asyncio.sleep(0.05)
         except asyncio.CancelledError:
             await rm.broadcast(room_code, "round.audio_stop", {}, channel_layer)
             raise
         finally:
-            ffmpeg.kill()
+            if ffmpeg.returncode is None:
+                ffmpeg.kill()
             await ffmpeg.wait()
 
         await rm.broadcast(room_code, "round.audio_end", {}, channel_layer)

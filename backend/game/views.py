@@ -3,7 +3,7 @@ import secrets
 from urllib.parse import urlencode
 
 import httpx
-from django.contrib.auth import get_user_model, login, logout
+from django.contrib.auth import alogin, get_user_model, logout
 from django.conf import settings
 from django.core.cache import cache
 from django.http import JsonResponse
@@ -49,13 +49,14 @@ def spotify_logout(request):
 
 @require_GET
 async def spotify_playlists(request):
-    if not request.user.is_authenticated:
+    user = await request.auser()
+    if not user.is_authenticated:
         return JsonResponse(
             {"ok": False, "error": "authentication_required"}, status=401
         )
 
     try:
-        playlists = await get_playlists(request.user)
+        playlists = await get_playlists(user)
     except SpotifyToken.DoesNotExist:
         return JsonResponse(
             {"ok": False, "error": "spotify_token_not_found"}, status=404
@@ -86,13 +87,14 @@ async def spotify_playlists(request):
 
 @require_GET
 async def spotify_user_profile(request):
-    if not request.user.is_authenticated:
+    user = await request.auser()
+    if not user.is_authenticated:
         return JsonResponse(
             {"ok": False, "error": "authentication_required"}, status=401
         )
 
     try:
-        profile = await get_user_profile(request.user)
+        profile = await get_user_profile(user)
     except SpotifyToken.DoesNotExist:
         return JsonResponse(
             {"ok": False, "error": "spotify_token_not_found"}, status=404
@@ -182,7 +184,7 @@ async def spotify_callback(request):
         user.set_unusable_password()
         await user.asave(update_fields=["password"])
 
-    login(request, user)
+    await alogin(request, user)
 
     await SpotifyToken.objects.aupdate_or_create(
         user=user,

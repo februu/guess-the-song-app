@@ -89,7 +89,6 @@ function GameContent() {
           const { sampleRate, channels } = msg.data;
           channelsRef.current = channels;
           audio.init({ sampleRate, channels });
-          audio.setVolume(muted ? 0 : volume);
           break;
         }
         case "round.audio_stop": audio.stop(); break;

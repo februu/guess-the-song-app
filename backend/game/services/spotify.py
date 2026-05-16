@@ -10,8 +10,9 @@ async def get_valid_token(user) -> str:
     from ..models import SpotifyToken
 
     token_obj = await SpotifyToken.objects.aget(user=user)
+    expired = token_obj.expires_at <= now()
 
-    if token_obj.expires_at <= now():
+    if expired:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 TOKEN_URL,
@@ -38,9 +39,10 @@ async def get_playlists(user) -> list[dict]:
     if not getattr(user, "is_authenticated", False):
         raise ValueError("authenticated user required")
 
+    spotify_user_id = user.username.removeprefix("spotify_")
     token = await get_valid_token(user)
     headers = {"Authorization": f"Bearer {token}"}
-    url = f"{API_BASE}/me/playlists?fields=items(id,name,images(url)),next&limit=50"
+    url = f"{API_BASE}/me/playlists?fields=items(id,name,images(url),owner(id)),next&limit=50"
     playlists = []
 
     async with httpx.AsyncClient() as client:
@@ -50,6 +52,8 @@ async def get_playlists(user) -> list[dict]:
             payload = resp.json()
 
             for item in payload.get("items", []):
+                if item.get("owner", {}).get("id") != spotify_user_id:
+                    continue
                 playlists.append(
                     {
                         "id": item.get("id"),
@@ -108,36 +112,47 @@ async def get_playlist_tracks(user, playlist_id: str) -> list[dict]:
 
     token = await get_valid_token(user)
     headers = {"Authorization": f"Bearer {token}"}
-    url = f"{API_BASE}/playlists/{playlist_id}/items?fields=items(track(id,name,artists(name),album(images(url)))),next&limit=100"
     tracks = []
+    page = 0
 
     async with httpx.AsyncClient() as client:
-        while url:
-            resp = await client.get(url, headers=headers)
+        next_url: str | None = f"{API_BASE}/playlists/{playlist_id}/items?limit=100"
+        while next_url:
+            page += 1
+            resp = await client.get(next_url, headers=headers)
+            if resp.status_code >= 400:
+                if resp.status_code == 403:
+                    raise ValueError(
+                        "This playlist can't be used — Spotify restricts API access to auto-generated playlists (e.g. Shazam Tracks, Episodes, mixes). Try a regular playlist you created."
+                    )
+                if resp.status_code == 401:
+                    raise ValueError(
+                        "Spotify token expired or invalid — please log out and log back in."
+                    )
             resp.raise_for_status()
             payload = resp.json()
-            print(payload)
+            items = payload.get("items", [])
 
-            for item in payload.get("items", []):
-                track = (item or {}).get("track") or {}
-                if track.get("type") and track.get("type") != "track":
-                    continue
+            for i, item in enumerate(items):
+                track = (item or {}).get("item") or (item or {}).get("track") or {}
                 if not track:
                     continue
 
                 tracks.append(
                     {
-                        "id": track.get("id"),
-                        "name": track.get("name"),
+                        "id": track["id"],
+                        "name": track["name"],
                         "artists": [
                             artist.get("name")
                             for artist in track.get("artists", [])
                             if artist.get("name")
                         ],
-                        "image_url": (track.get("album", {}).get("images") or [{}])[0].get("url"),
+                        "image_url": (track.get("album", {}).get("images") or [{}])[
+                            0
+                        ].get("url"),
                     }
                 )
 
-            url = payload.get("next")
+            next_url = payload.get("next")
 
     return tracks

@@ -71,6 +71,7 @@ export async function tryLoadSpotifySession(): Promise<{
     ]);
     return { profile, playlists };
   } catch (err: unknown) {
+    if (err instanceof TypeError) return null; // network error — backend unreachable
     if (
       err instanceof Error &&
       "status" in err &&

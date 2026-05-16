@@ -16,7 +16,7 @@ from .game.exceptions import (
     GameAlreadyRunning,
     NoTracksAvailable,
 )
-from services.spotify import get_playlist_details
+from .services.spotify import get_playlist_details
 
 rm = RoomManager()
 
@@ -93,7 +93,9 @@ class GameConsumer(AsyncWebsocketConsumer):
         rounds = data["rounds"]
 
         try:
-            playlist_details = await get_playlist_details(self.scope.get("user"), playlist_id)
+            playlist_details = await get_playlist_details(
+                self.scope.get("user"), playlist_id
+            )
             room_code = await rm.create_room(
                 self.channel_name,
                 self.channel_layer,
@@ -193,6 +195,8 @@ class GameConsumer(AsyncWebsocketConsumer):
             await self.send_error("game_already_running", str(e))
         except NoTracksAvailable as e:
             await self.send_error("no_tracks", str(e))
+        except Exception as e:
+            await self.send_error("start_failed", str(e))
 
     # song.guess
     async def on_song_guess(self, data):

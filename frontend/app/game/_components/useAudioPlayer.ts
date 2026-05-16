@@ -12,29 +12,47 @@ export function useAudioPlayer() {
   const gainNodeRef  = useRef<GainNode | null>(null);
   const nextTimeRef  = useRef<number>(0);
   const volumeRef    = useRef<number>(1);
+  const unlockRef    = useRef<(() => void) | null>(null);
+
+  const removeUnlock = useCallback(() => {
+    if (unlockRef.current) {
+      document.removeEventListener("click",   unlockRef.current);
+      document.removeEventListener("keydown", unlockRef.current);
+      unlockRef.current = null;
+    }
+  }, []);
 
   const init = useCallback((config: AudioConfig) => {
     if (audioCtxRef.current) {
       audioCtxRef.current.close();
     }
+    removeUnlock();
     const ctx  = new AudioContext({ sampleRate: config.sampleRate });
     const gain = ctx.createGain();
     gain.gain.value = volumeRef.current;
     gain.connect(ctx.destination);
     ctx.resume();
+
+    // Safari keeps AudioContext suspended until a user gesture; unlock on first interaction.
+    const unlock = () => { ctx.resume(); removeUnlock(); };
+    unlockRef.current = unlock;
+    document.addEventListener("click",   unlock, { once: true });
+    document.addEventListener("keydown", unlock, { once: true });
+
     audioCtxRef.current = ctx;
     gainNodeRef.current = gain;
     nextTimeRef.current = 0;
-  }, []);
+  }, [removeUnlock]);
 
   const stop = useCallback(() => {
+    removeUnlock();
     if (audioCtxRef.current) {
       audioCtxRef.current.close();
       audioCtxRef.current = null;
       gainNodeRef.current = null;
     }
     nextTimeRef.current = 0;
-  }, []);
+  }, [removeUnlock]);
 
   const setVolume = useCallback((v: number) => {
     volumeRef.current = v;
@@ -47,6 +65,8 @@ export function useAudioPlayer() {
     const ctx  = audioCtxRef.current;
     const gain = gainNodeRef.current;
     if (!ctx || !gain) return;
+
+    if (ctx.state === "suspended") ctx.resume();
 
     const raw    = new DataView(arrayBuffer);
     const frames = (raw.byteLength / 2) / channels;

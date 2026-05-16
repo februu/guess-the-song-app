@@ -11,7 +11,8 @@ _FUZZY_THRESHOLD = 0.8
 
 def _normalize_tokens(text: str) -> list[str]:
     """Converts text to a list of normalized tokens for matching guesses to answers."""
-    text = re.sub(r"[\(\[].*?[\)\]]", "", text)
+    text = re.sub(r"[\(\[].*?[\)\]]", "", text)   # drop (Remix) / [Extended Mix]
+    text = re.sub(r"\s+-\s+.*$", "", text)         # drop " - Remix" / " - Original Mix" suffixes
     text = re.sub(r"[^\w\s']", " ", text)
     return [w for w in text.lower().split() if w not in _FILLER_WORDS]
 
@@ -105,6 +106,9 @@ class RoundState:
         # Pre-computed lowercased answer and normalized tokens for matching
         self._answer = track["name"].lower()
         self._answer_tokens = _normalize_tokens(track["name"])
+
+        # Monotonic timestamp of when this round started, used for time-based scoring.
+        self.start_time: float = time.monotonic()
 
         # channel_names → monotonic_timestamps. Only CORRECT guesses should be recorded.
         self.correct_guesses_times: dict[str, float] = {}

@@ -2,11 +2,11 @@ import asyncio
 import yt_dlp
 
 
-async def resolve_youtube_query(query: str) -> str:
+async def resolve_youtube_query(query: str) -> tuple[str, float | None]:
     return await asyncio.to_thread(_resolve_sync, query)
 
 
-def _resolve_sync(query: str) -> str:
+def _resolve_sync(query: str) -> tuple[str, float | None]:
     ydl_opts = {
         "format": "bestaudio",
         "quiet": True,
@@ -18,7 +18,8 @@ def _resolve_sync(query: str) -> str:
         if not info.get("entries") or len(info["entries"]) == 0:  # type: ignore
             raise ValueError("No results found for query")
         entry = info["entries"][0]  # type: ignore
+        duration: float | None = entry.get("duration")
         for fmt in reversed(entry.get("formats", [])):
             if fmt.get("acodec") != "none" and fmt.get("vcodec") == "none":
-                return fmt["url"]
-        return entry["url"]
+                return fmt["url"], duration
+        return entry["url"], duration
