@@ -28,6 +28,14 @@ http://localhost:8000
 ws://localhost:8000
 ```
 
+## Running in prod
+
+```
+docker compose up -d
+docker compose exec backend uv run python manage.py makemigrations game
+docker compose exec backend uv run python manage.py migrate
+```
+
 ## HTTP Requests
 
 All requests must include `credentials: "include"` so the browser sends the session cookie.

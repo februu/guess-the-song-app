@@ -1,7 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import type { Player } from "./MultiplayerLayout";
+export interface Player {
+  name: string;
+  score: number;
+  isMe: boolean;
+}
 
 interface Props {
   mode: "singleplayer" | "multiplayer";
