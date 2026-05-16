@@ -27,9 +27,9 @@ function GameContent() {
   const searchParams = useSearchParams();
   const mode         = (searchParams.get("mode") ?? "multiplayer") as "singleplayer" | "multiplayer";
 
-  const myNickname    = useRef(sessionStorage.getItem("my_nickname") ?? "");
-  const playlistName  = sessionStorage.getItem("playlist_name") ?? "";
-  const playlistImage = sessionStorage.getItem("playlist_image") ?? "";
+  const myNickname    = useRef("");
+  const [playlistName,  setPlaylistName]  = useState("");
+  const [playlistImage, setPlaylistImage] = useState("");
 
   const [phase,       setPhase]      = useState<GamePhase>("waiting");
   const [roundInfo,   setRoundInfo]  = useState<RoundInfo | null>(null);
@@ -67,6 +67,12 @@ function GameContent() {
   function handleToggleMute() {
     const n = !muted; setMuted(n); audio.setVolume(n ? 0 : volume);
   }
+
+  useEffect(() => {
+    myNickname.current  = sessionStorage.getItem("my_nickname")    ?? "";
+    setPlaylistName(sessionStorage.getItem("playlist_name")  ?? "");
+    setPlaylistImage(sessionStorage.getItem("playlist_image") ?? "");
+  }, []);
 
   useEffect(() => {
     const unsub = gameWS.onMessage((msg) => {
@@ -278,7 +284,7 @@ function GameContent() {
                 {phase === "playing" && (
                   <>
                     <div className="w-full rounded-[20px] px-6 py-6 bg-[oklch(0.88_0.005_272)] dark:bg-[oklch(0.2403_0.0137_272.76)] flex flex-col items-center gap-5">
-                      <div className="flex items-end gap-1 h-16 w-full justify-center">
+                      <div className="flex items-center gap-1 h-16 w-full justify-center">
                         {Array.from({ length: 40 }).map((_, i) => (
                           <div
                             key={i}
@@ -287,6 +293,7 @@ function GameContent() {
                               height: `${22 + Math.sin(i * 0.7) * 18 + Math.cos(i * 0.4) * 10}px`,
                               animation: `wave ${0.4 + (i % 7) * 0.08}s ease-in-out infinite alternate`,
                               animationDelay: `${i * 0.03}s`,
+                              transformOrigin: "center",
                             }}
                           />
                         ))}
