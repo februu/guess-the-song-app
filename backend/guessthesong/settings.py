@@ -31,7 +31,13 @@ REDIS_URL = os.environ.get("REDIS_URL")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    FRONTEND_URL.replace("http://", "")
+    .replace("https://", "")
+    .split("/")[0]
+    .split(":")[0],
+    "localhost",
+]
 
 
 # Application definition
@@ -141,7 +147,7 @@ USE_TZ = True
 STATIC_URL = "static/"
 
 # CORS
-CORS_ALLOWED_ORIGINS = [FRONTEND_URL]
+CORS_ALLOWED_ORIGINS = [FRONTEND_URL.split("/")[0] + "//" + FRONTEND_URL.split("/")[2]]
 CORS_ALLOW_CREDENTIALS = True
 
 # Session cookie is sent cross-origin in production (requires HTTPS).

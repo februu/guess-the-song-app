@@ -1,7 +1,7 @@
 import asyncio
 import base64
 import random
-from asgiref.sync import sync_to_async
+
 
 from ..services.spotify import get_playlist_tracks
 from ..services.youtube import resolve_youtube_query
@@ -13,7 +13,7 @@ rm = RoomManager()
 
 ROUND_DURATION = 30  # seconds players have to guess before the round ends automatically
 AUDIO_CLIP_LENGTH = 30  # seconds of audio to stream per round
-ROUND_BREAK = 5  # seconds of downtime between rounds (show scoreboard, breathe)
+ROUND_BREAK = 5  # seconds of downtime between rounds (show scoreboard)
 SAMPLE_RATE = 48000
 CHANNELS = 2
 CHUNK = 4096
@@ -41,7 +41,7 @@ class GameManager:
             raise GameAlreadyRunning("Game is already running for this room")
 
         room = await rm._get_room(room_code)
-        tracks = await sync_to_async(get_playlist_tracks)(user, room.playlist_id)
+        tracks = await get_playlist_tracks(user, room.playlist_id)
 
         if not tracks:
             raise NoTracksAvailable("Playlist has no playable tracks")
@@ -97,7 +97,7 @@ class GameManager:
                         "points": points,
                         "title": round_state.track["name"],
                         "artist": ", ".join(round_state.track.get("artists", [])),
-                        "img": None,  # TODO: fetch track image from Spotify
+                        "img": round_state.track.get("image_url"),
                     },
                 },
             )
@@ -135,6 +135,7 @@ class GameManager:
         between rounds. Broadcasts room.ended when all rounds are complete.
         """
         try:
+            await asyncio.sleep(3)  # countdown before the first round starts
             for i, track in enumerate(tracks):
                 await self._run_round(
                     room_code, channel_layer, track, round_number=i + 1
@@ -219,7 +220,7 @@ class GameManager:
         query = f"{track['name']} {' '.join(track.get('artists', []))}"
 
         try:
-            url = await asyncio.to_thread(resolve_youtube_query, query)
+            url = await resolve_youtube_query(query)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -290,7 +291,7 @@ class GameManager:
                         "points": round_state.round_scores.get(channel_name, 0),
                         "title": round_state.track["name"],
                         "artist": ", ".join(round_state.track.get("artists", [])),
-                        "img": None,  # TODO: fetch track image from Spotify
+                        "img": round_state.track.get("image_url"),
                     },
                 },
             )

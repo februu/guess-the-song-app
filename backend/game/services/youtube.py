@@ -1,12 +1,12 @@
+import asyncio
 import yt_dlp
 
 
-def resolve_youtube_query(query: str) -> str:
-    """
-    Resolves a YouTube search query to a direct audio URL.
-    Returns the URL of the best audio format.
-    Can raise ValueError if no results are found.
-    """
+async def resolve_youtube_query(query: str) -> str:
+    return await asyncio.to_thread(_resolve_sync, query)
+
+
+def _resolve_sync(query: str) -> str:
     ydl_opts = {
         "format": "bestaudio",
         "quiet": True,

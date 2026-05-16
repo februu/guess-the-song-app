@@ -16,6 +16,7 @@ from .game.exceptions import (
     GameAlreadyRunning,
     NoTracksAvailable,
 )
+from services.spotify import get_playlist_details
 
 rm = RoomManager()
 
@@ -92,8 +93,15 @@ class GameConsumer(AsyncWebsocketConsumer):
         rounds = data["rounds"]
 
         try:
+            playlist_details = await get_playlist_details(self.scope.get("user"), playlist_id)
             room_code = await rm.create_room(
-                self.channel_name, self.channel_layer, username, playlist_id, rounds
+                self.channel_name,
+                self.channel_layer,
+                username,
+                playlist_id,
+                playlist_details["name"],
+                playlist_details["image_url"],
+                rounds,
             )
         except RoomCodeGenerationFailed as e:
             await self.send_error("create_failed", str(e))
@@ -157,7 +165,9 @@ class GameConsumer(AsyncWebsocketConsumer):
             await self.send_error("not_in_room", "Not in a room")
             return
         try:
-            await rm.set_player_ready(self.room_code, self.channel_name, self.channel_layer)
+            await rm.set_player_ready(
+                self.room_code, self.channel_name, self.channel_layer
+            )
         except RoomNotFound as e:
             await self.send_error("room_not_found", str(e))
         except RoomAlreadyStarted as e:

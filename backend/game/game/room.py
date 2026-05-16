@@ -22,12 +22,18 @@ class RoomManager:
     """Manages game rooms, including creation, joining, leaving, and broadcasting."""
 
     async def create_room(
-        self, channel_name, channel_layer, username: str, playlist_id: str, rounds: int
+        self,
+        channel_name,
+        channel_layer,
+        username: str,
+        playlist_id: str,
+        playlist_name: str,
+        playlist_img: str,
+        rounds: int,
     ) -> str:
         """Creates a new room and returns the room code."""
         self._validate_user_name(username)
         self._validate_rounds(rounds)
-        # TODO: validate playlist_id with spotify API before creating room and update the room state with image and name
         room_code = await self._create_unique_code()
         room = RoomState(
             host_channel=channel_name,
@@ -35,6 +41,8 @@ class RoomManager:
             rounds=rounds,
             code=room_code,
             playlist_id=playlist_id,
+            playlist_name=playlist_name,
+            playlist_img=playlist_img,
         )
         await self._set_room(room_code, room)
         await channel_layer.group_add(f"layer_{room_code}", channel_name)
@@ -58,7 +66,9 @@ class RoomManager:
         """Toggles a player's ready status and broadcasts the updated room state."""
         room = await self._get_room(room_code)
         if room.started:
-            raise RoomAlreadyStarted("Cannot change ready status after the game has started")
+            raise RoomAlreadyStarted(
+                "Cannot change ready status after the game has started"
+            )
         if channel_name not in room.members:
             raise RoomNotFound("Player is not in this room")
         if channel_name in room.ready_players:

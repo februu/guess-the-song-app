@@ -48,14 +48,14 @@ def spotify_logout(request):
 
 
 @require_GET
-def spotify_playlists(request):
+async def spotify_playlists(request):
     if not request.user.is_authenticated:
         return JsonResponse(
             {"ok": False, "error": "authentication_required"}, status=401
         )
 
     try:
-        playlists = get_playlists(request.user)
+        playlists = await get_playlists(request.user)
     except SpotifyToken.DoesNotExist:
         return JsonResponse(
             {"ok": False, "error": "spotify_token_not_found"}, status=404
@@ -85,14 +85,14 @@ def spotify_playlists(request):
 
 
 @require_GET
-def spotify_user_profile(request):
+async def spotify_user_profile(request):
     if not request.user.is_authenticated:
         return JsonResponse(
             {"ok": False, "error": "authentication_required"}, status=401
         )
 
     try:
-        profile = get_user_profile(request.user)
+        profile = await get_user_profile(request.user)
     except SpotifyToken.DoesNotExist:
         return JsonResponse(
             {"ok": False, "error": "spotify_token_not_found"}, status=404
@@ -122,7 +122,7 @@ def spotify_user_profile(request):
 
 
 @require_GET
-def spotify_callback(request):
+async def spotify_callback(request):
     frontend_url = settings.FRONTEND_URL
 
     if request.GET.get("error"):
@@ -134,38 +134,40 @@ def spotify_callback(request):
     if not code or not state:
         return redirect(f"{frontend_url}?auth_error=missing_code_or_state")
 
-    state_exists = cache.get(f"spotify_state_{state}")
+    state_exists = await cache.aget(f"spotify_state_{state}")  # type: ignore[attr-defined]
     if not state_exists:
         return redirect(f"{frontend_url}?auth_error=invalid_state")
 
-    cache.delete(f"spotify_state_{state}")
+    await cache.adelete(f"spotify_state_{state}")  # type: ignore[attr-defined]
 
-    token_resp = httpx.post(
-        SPOTIFY_TOKEN_URL,
-        data={
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": settings.SPOTIFY_REDIRECT_URI,
-            "client_id": settings.SPOTIFY_CLIENT_ID,
-            "client_secret": settings.SPOTIFY_CLIENT_SECRET,
-        },
-    )
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post(
+            SPOTIFY_TOKEN_URL,
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": settings.SPOTIFY_REDIRECT_URI,
+                "client_id": settings.SPOTIFY_CLIENT_ID,
+                "client_secret": settings.SPOTIFY_CLIENT_SECRET,
+            },
+        )
 
-    if token_resp.status_code >= 400:
-        return redirect(f"{frontend_url}?auth_error=token_exchange_failed")
+        if token_resp.status_code >= 400:
+            return redirect(f"{frontend_url}?auth_error=token_exchange_failed")
 
-    token_data = token_resp.json()
-    access_token = token_data.get("access_token")
-    refresh_token = token_data.get("refresh_token")
-    expires_in = token_data.get("expires_in")
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token")
+        refresh_token = token_data.get("refresh_token")
+        expires_in = token_data.get("expires_in")
 
-    if not access_token or not refresh_token or not expires_in:
-        return redirect(f"{frontend_url}?auth_error=invalid_token_response")
+        if not access_token or not refresh_token or not expires_in:
+            return redirect(f"{frontend_url}?auth_error=invalid_token_response")
 
-    profile_resp = httpx.get(
-        "https://api.spotify.com/v1/me",
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
+        profile_resp = await client.get(
+            "https://api.spotify.com/v1/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
     if profile_resp.status_code >= 400:
         return redirect(f"{frontend_url}?auth_error=profile_fetch_failed")
 
@@ -175,14 +177,14 @@ def spotify_callback(request):
 
     User = get_user_model()
     username = f"spotify_{spotify_user_id}"[:150]
-    user, created = User.objects.get_or_create(username=username)
+    user, created = await User.objects.aget_or_create(username=username)
     if created:
         user.set_unusable_password()
-        user.save(update_fields=["password"])
+        await user.asave(update_fields=["password"])
 
     login(request, user)
 
-    SpotifyToken.objects.update_or_create(
+    await SpotifyToken.objects.aupdate_or_create(
         user=user,
         defaults={
             "access_token": access_token,
@@ -191,4 +193,4 @@ def spotify_callback(request):
         },
     )
 
-    return redirect(frontend_url)
+    return redirect(f"{frontend_url}?spotify_connected=true")
