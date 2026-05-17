@@ -47,6 +47,21 @@ function GameContent() {
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audio          = useAudioPlayer();
   const channelsRef    = useRef(2);
+  const phaseRef       = useRef(phase);
+  phaseRef.current     = phase;
+
+  useEffect(() => {
+    if (mode !== "multiplayer") return;
+    const path = window.location.pathname + window.location.search;
+    window.history.pushState(null, "", path);
+    const handlePopState = () => {
+      if (phaseRef.current !== "ended") {
+        window.history.pushState(null, "", path);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [mode]);
 
   function handleLeave() {
   audio.stop();
@@ -56,7 +71,7 @@ function GameContent() {
   function handleLeaveToLobby() {
   audio.stop();
   gameWS.disconnect();
-  router.push(mode === "singleplayer" ? "/singleplayer" : "/lobby");
+  router.push(mode === "singleplayer" ? "/singleplayer" : "/multiplayer");
 }
   function handleBackToLobby() { router.push("/lobby"); }
   function handlePlayAgain() { gameWS.disconnect(); router.push("/singleplayer"); }
