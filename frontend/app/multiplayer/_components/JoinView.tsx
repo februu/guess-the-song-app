@@ -17,6 +17,8 @@ export function JoinView() {
   const [error,     setError]     = useState("");
   const [joining,   setJoining]   = useState(false);
 
+  // Handles the "Join room" button click: validates input, connects to the game WebSocket, 
+  // sends a join request, and navigates to the lobby on success
   async function handleJoin() {
     let valid = true;
     if (!isValidName(nickname)) { setNameError("3–20 chars, letters, numbers or underscores only"); valid = false; }

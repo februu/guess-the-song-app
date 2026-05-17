@@ -1,18 +1,21 @@
-// ─── Outgoing (client → server) ───────────────────────────────────────────────
+// ─── Outgoing (client → server) ───//
 
+// These are the messages that the client can send to the server through the WebSocket connection
 export interface CreateRoomPayload {
   name: string;
   playlist_id: string;
   playlist_name: string;
-  playlist_img: string;  // ← dodaj
+  playlist_img: string;  
   rounds: number;
 }
 
+// Payload for joining a room, includes the player's name and the room code they want to join
 export interface JoinRoomPayload {
   name: string;
   code: string;
 }
 
+// The different types of messages that the client can send to the server
 export type ClientMessage =
   | { type: "room.create"; data: CreateRoomPayload }
   | { type: "room.join";   data: JoinRoomPayload }
@@ -20,7 +23,7 @@ export type ClientMessage =
   | { type: "room.start";  data: Record<string, never> }
   | { type: "song.guess";  data: { guess: string } };
 
-// ─── Room state (from backend) ────────────────────────────────────────────────
+// ─── Room state (from backend) ───//
 
 export interface RoomState {
   code: string;
@@ -42,7 +45,7 @@ export interface SongResult {
   img: string | null;
 }
 
-// ─── Incoming (server → client) ───────────────────────────────────────────────
+// ─── Incoming (server → client) ───//
 
 export type ServerMessage =
   | { ok: true;  type: "room.updated";       data: { state: RoomState } }
@@ -57,8 +60,9 @@ export type ServerMessage =
   | { ok: true;  type: "song.incorrect";     data: Record<string, never> }
   | { ok: false; type?: string; error: { code: string; message: string } };
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
+// ─── Helper ───//
 
+// Helper function to build a ClientMessage object and convert it to a JSON string for sending through the WebSocket
 export function buildClientMessage(msg: ClientMessage): string {
   return JSON.stringify(msg);
 }

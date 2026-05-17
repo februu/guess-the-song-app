@@ -5,7 +5,7 @@ import type { View } from "./MultiplayerShell";
 interface Props {
   onChoose: (v: View) => void;
 }
-
+// This component renders the initial view where the user can choose to either create a new multiplayer room or join an existing one.
 export function ChooseView({ onChoose }: Props) {
   return (
     <div className="flex flex-col gap-5 w-full">

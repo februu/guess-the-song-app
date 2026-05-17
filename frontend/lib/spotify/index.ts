@@ -1,56 +1,55 @@
 import { api, API_BASE } from "../api/client";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface SpotifyProfile {
-  id: string;
-  display_name: string | null;
-  profile_image_url: string | null;
+// ─── Types ─── //
+// represents the authenticated user's Spotify profile information
+export interface SpotifyProfile { 
+  id: string; // Spotify user ID
+  display_name: string | null; // user's display name, or null if not set 
+  profile_image_url: string | null; // URL of the user's profile image, or null if not set
 }
 
+// represents a Spotify playlist that the user can select for playing the game
 export interface SpotifyPlaylist {
-  id: string;
-  name: string;
-  image_url: string | null;
-  track_count?: number;
+  id: string; // Spotify playlist ID
+  name: string; // name of the playlist
+  image_url: string | null; // URL of the playlist's cover image, or null if not available
+  track_count?: number; // optional number of tracks in the playlist, may be undefined if not loaded yet
 }
 
+// response format for the Spotify profile API endpoint
 interface ProfileResponse {
-  ok: true;
+  ok: true; 
   profile: SpotifyProfile;
 }
 
+// response format for the Spotify playlists API endpoint
 interface PlaylistsResponse {
   ok: true;
   playlists: SpotifyPlaylist[];
 }
 
-// ─── Auth helpers ─────────────────────────────────────────────────────────────
+// ─── Auth helpers ─── //
 
-/**
- * Redirects the browser to the Django Spotify OAuth login endpoint.
- * This MUST be a plain browser redirect — the backend returns a 302,
- * not JSON, so it must never go through apiFetch.
- */
+ // Redirects the browser to the Django Spotify OAuth login endpoint.
 export function redirectToSpotifyLogin(origin: "/multiplayer" | "/singleplayer" = "/multiplayer"): void {
   localStorage.setItem("spotify_auth_origin", origin);
-  window.location.href = `${API_BASE}/spotify/login`;
+  window.location.href = `${API_BASE}/spotify/login`; // redirect to backend login endpoint
 }
 
-/** Calls the backend logout endpoint, clears the session cookie. */
+// Calls the backend logout endpoint, clears the session cookie
 export async function spotifyLogout(): Promise<void> {
   await api.get("/spotify/logout");
 }
 
-// ─── Data fetchers ────────────────────────────────────────────────────────────
+// ─── Data fetchers ─── //
 
-/** Returns the authenticated user's Spotify profile, or throws ApiError. */
+// Returns the authenticated user's Spotify profile, or throws ApiError. 
 export async function fetchSpotifyProfile(): Promise<SpotifyProfile> {
   const res = await api.get<ProfileResponse>("/spotify/profile");
   return res.profile;
 }
 
-/** Returns the user's Spotify playlists, or throws ApiError. */
+// Returns the user's Spotify playlists, or throws ApiError.
 export async function fetchSpotifyPlaylists(): Promise<SpotifyPlaylist[]> {
   const res = await api.get<PlaylistsResponse>("/spotify/playlists");
   return res.playlists;

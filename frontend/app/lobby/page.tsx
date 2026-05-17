@@ -21,13 +21,16 @@ export default function LobbyPage() {
     // Request fresh room state on mount
     gameWS.onMessage // already subscribed
 
-// Also re-read sessionStorage on mount — it was updated by /game via room.updated
+  // Also re-read sessionStorage on mount — it was updated by /game via room.updated
     const raw  = sessionStorage.getItem("room_state");
     const nick = sessionStorage.getItem("my_nickname") ?? "";
     const host = sessionStorage.getItem("is_host") === "true";
 
+    // If there's no room state in sessionStorage, it means the user accessed the lobby page directly without joining or creating a room, 
+    // so we redirect them back to the multiplayer page.
     if (!raw) { router.replace("/multiplayer"); return; }
 
+    // Initialize the lobby state with the data from sessionStorage and set up a WebSocket listener for room updates and game start events
     const initialState = JSON.parse(raw) as RoomState;
     setRoomState(initialState);
     setMyNickname(nick);
@@ -35,6 +38,7 @@ export default function LobbyPage() {
     setPlaylistName(sessionStorage.getItem("playlist_name") ?? "");
     setPlaylistImage(sessionStorage.getItem("playlist_image") ?? "");
 
+    // Subscribe to WebSocket messages to receive real-time updates about the room state and game events
     const unsubscribe = gameWS.onMessage((msg) => {
       if (!msg.ok) { setError(msg.error?.message ?? "An error occurred"); return; }
 
@@ -54,14 +58,22 @@ export default function LobbyPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleLeave()   { gameWS.disconnect(); router.push("/"); }
-  function handleBack()    { gameWS.disconnect(); router.push("/multiplayer"); }
+  // Handles the "Leave" button click: disconnects from the game WebSocket and navigates back to the home page
+  function handleLeave()   { gameWS.disconnect(); router.push("/"); } 
+
+  // Handles the "Back" button click: disconnects from the game WebSocket and navigates back to the multiplayer page 
+  function handleBack()    { gameWS.disconnect(); router.push("/multiplayer"); } 
+
+  // Handles the "Copy" button click: copies the room code to the clipboard and shows a temporary "Copied!" message
   function handleCopy()    {
     if (!roomState) return;
     navigator.clipboard.writeText(roomState.code).catch(() => {});
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   }
+  // Handles the "Ready" button click: sends a ready message to the server to indicate that the player is ready to start the game
   function handleReady()   { gameWS.send({ type: "room.ready", data: {} }); }
+
+  // Handles the "Start game" button click: sends a start message to the server to initiate the game start process (only available to the host)
   function handleStart()   { setStarting(true); gameWS.send({ type: "room.start", data: {} }); }
 
   if (!roomState) {
@@ -72,6 +84,7 @@ export default function LobbyPage() {
     );
   }
 
+  // Determine if the current player is marked as ready in the room state
   const amReady = (roomState.ready_players ?? []).includes(myNickname);
 
   return (

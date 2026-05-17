@@ -31,6 +31,10 @@ function SpotifyIcon({ size = 20 }: { size?: number }) {
   );
 }
 
+// This component implements the singleplayer game setup flow, which consists of 3 steps:
+// 1. Connect Spotify account
+// 2. Pick a playlist from the user's Spotify playlists
+// 3. Configure game settings (nickname, rounds) and start the game
 type Step = "connect" | "pick-playlist" | "configure";
 
 export default function SingleplayerPage() {
@@ -48,22 +52,23 @@ export default function SingleplayerPage() {
   const [starting,         setStarting]         = useState(false);
 
   useEffect(() => {
-    sessionLoadStarted = false;
-    userLoggedOut = false;
-    const params      = new URLSearchParams(window.location.search);
-    const isPostLogin = params.get("spotify") === "connected";
-    if (isPostLogin) {
-      userLoggedOut = false;
-      window.history.replaceState({}, "", "/singleplayer");
-      loadSession(false);
+    sessionLoadStarted = false; // reset on component mount
+    userLoggedOut = false; // reset on component mount
+    const params      = new URLSearchParams(window.location.search); // check if we're coming back from Spotify login redirect
+    const isPostLogin = params.get("spotify") === "connected"; // if so, we can skip the loading state and just load the session directly, since we know the Spotify data is now available
+    if (isPostLogin) { // if we're coming back from Spotify login, we can skip the loading state and just load the session directly, since we know the Spotify data is now available
+      userLoggedOut = false // reset logout flag, since the user just logged in
+      window.history.replaceState({}, "", "/singleplayer"); // clean up URL
+      loadSession(false); // load session without showing loading state, since we know the data is ready
     } else {
-      loadSession(true);
+      loadSession(true); // otherwise, try to load session
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Loads the Spotify session (profile + playlists) and updates state accordingly. 
   async function loadSession(silent: boolean) {
-    if (silent && userLoggedOut) return;
+    if (silent && userLoggedOut) return; 
     try {
       if (!silent) setLoading(true);
       setError("");
@@ -81,6 +86,7 @@ export default function SingleplayerPage() {
     }
   }
 
+  // Handles user logout: calls the Spotify logout endpoint, clears session state, and resets to the initial step
   async function handleLogout() {
     userLoggedOut = true; sessionLoadStarted = false;
     try { await spotifyLogout(); } catch { /* best-effort */ }
@@ -88,12 +94,16 @@ export default function SingleplayerPage() {
     setNickname(""); setStep("connect");
   }
 
+  // Handles playlist selection: sets the selected playlist and moves to the configuration step. 
   function handlePlaylistSelect(playlist: SpotifyPlaylist) {
     setSelectedPlaylist(playlist);
     if (playlist.track_count && rounds > playlist.track_count) setRounds(playlist.track_count);
     setStep("configure");
   }
 
+  // Handles the "Start game" button click: 
+  // validates input, connects to the game WebSocket, 
+  // creates a new room, and navigates to the game page on success.
   async function handleStart() {
     if (!isValidName(nickname)) { setNameError("3–20 chars, letters, numbers or underscores only"); return; }
     if (!selectedPlaylist) { setError("Select a playlist first"); return; }
@@ -130,8 +140,10 @@ export default function SingleplayerPage() {
     }, 10000);
   }
 
+  // The maximum number of rounds is either the number of tracks in the selected playlist (if available) or a default of 20
   const maxRounds = selectedPlaylist?.track_count || 20;
 
+  // Handles the "Back" button click: navigates back to the previous step in the setup flow
   function handleBack() {
     if (step === "configure") setStep("pick-playlist");
     else if (step === "pick-playlist") setStep("connect");

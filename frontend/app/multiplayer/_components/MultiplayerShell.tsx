@@ -21,6 +21,7 @@ export function MultiplayerShell() {
     }
   }, [searchParams]);
 
+  // Handles the "Back" button click: navigates back through the create room steps or returns to the initial view
   function handleBack() {
     if (view === "create") {
       if (createStep === "configure") {

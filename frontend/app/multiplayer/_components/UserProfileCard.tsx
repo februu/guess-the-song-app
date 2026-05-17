@@ -7,6 +7,8 @@ interface Props {
   onLogout: () => void;
 }
 
+// This component renders the user's Spotify profile information in a card format.
+// It displays the user's profile image and display name, and includes a "Not you?" button that calls the onLogout callback when clicked.
 export function UserProfileCard({ profile, onLogout }: Props) {
   return (
     <div className="flex items-center gap-3 rounded-full px-4 py-2 bg-black/10 dark:bg-white/10">

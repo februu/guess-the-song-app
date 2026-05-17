@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   description: "Guess songs with your friends!",
 };
 
-// Root layout — wraps every page in the app
+// Root layout - wraps every page in the app
 export default function RootLayout({
   children,
 }: Readonly<{

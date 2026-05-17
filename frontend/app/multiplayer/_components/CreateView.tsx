@@ -18,6 +18,11 @@ import { PlaylistRow } from "./PlaylistRow";
 
 const isValidName = (v: string) => /^[a-zA-Z0-9_]{3,20}$/.test(v);
 
+// This component manages the "Create Room" flow in the multiplayer mode.
+// It has three main steps:
+// 1. "connect": prompts the user to connect their Spotify account if not already connected.
+// 2. "pick-playlist": displays the user's Spotify playlists and allows them to select one for the game.
+// 3. "configure": lets the user set their nickname and number of rounds before creating the room.
 export type CreateStep = "connect" | "pick-playlist" | "configure";
 
 let userLoggedOut = false;
@@ -36,7 +41,7 @@ interface Props {
   onStepChange?: (step: CreateStep) => void;
 }
 
-export function CreateView({ initialStep, onStepChange }: Props) {
+export function CreateView({ initialStep, onStepChange }: Props) { 
   const router = useRouter();
 
   const [step, setStepInternal] = useState<CreateStep>(initialStep ?? "connect");
@@ -52,9 +57,9 @@ export function CreateView({ initialStep, onStepChange }: Props) {
   const [nameError, setNameError] = useState("");
   const [creating,  setCreating]  = useState(false);
 
-  function setStep(s: CreateStep) {
-    setStepInternal(s);
-    onStepChange?.(s);
+  function setStep(s: CreateStep) { // internal step setter that also notifies parent component of changes
+    setStepInternal(s); // update local state
+    onStepChange?.(s); // notify parent of step change
   }
 
   // Sync when parent changes initialStep (e.g. Back button)
@@ -62,6 +67,9 @@ export function CreateView({ initialStep, onStepChange }: Props) {
     if (initialStep) setStepInternal(initialStep);
   }, [initialStep]);
 
+  // On mount, try to load Spotify session. 
+  // This handles the case where the user is redirected back from Spotify login, as well as returning users who have an active session. 
+  // We use a flag to ensure this only runs once, even if the component re-renders.
   useEffect(() => {
     if (sessionLoadStarted) return;
     sessionLoadStarted = true;
@@ -79,6 +87,7 @@ export function CreateView({ initialStep, onStepChange }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Loads the user's Spotify profile and playlists.
   async function loadSpotifyData(silent: boolean) {
     if (silent && userLoggedOut) return;
     try {
@@ -98,12 +107,15 @@ export function CreateView({ initialStep, onStepChange }: Props) {
     }
   }
 
+  // Handles the "Create room" button click: validates input, connects to the game WebSocket, 
+  // creates a new room, and navigates to the lobby on success.
   function handlePlaylistSelect(p: SpotifyPlaylist) {
     setSelectedPlaylist(p);
     if (p.track_count && rounds > p.track_count) setRounds(p.track_count);
     setStep("configure");
   }
 
+  // Handles user logout: calls the Spotify logout endpoint, clears session state, and resets to the initial step
   async function handleLogout() {
     userLoggedOut = true;
     sessionLoadStarted = false;
@@ -112,6 +124,8 @@ export function CreateView({ initialStep, onStepChange }: Props) {
     setNickname(""); setStep("connect");
   }
 
+  // Handles the "Create room" button click: validates input, connects to the game WebSocket, creates a new room, 
+  // and navigates to the lobby on success.
   async function handleCreate() {
     if (!isValidName(nickname)) { setNameError("3–20 chars, letters, numbers or underscores only"); return; }
     if (!selectedPlaylist) { setError("Select a playlist first"); return; }
@@ -121,7 +135,7 @@ export function CreateView({ initialStep, onStepChange }: Props) {
     try { await gameWS.connect(); } catch {
       setError("Could not connect to server"); setCreating(false); return;
     }
-
+    // Listen for server responses to the room creation request. On success, save the room state and navigate to the lobby.
     const unsubscribe = gameWS.onMessage((msg) => {
       if (!msg.ok) {
         setError(msg.error?.message ?? "Failed to create room");
@@ -138,7 +152,7 @@ export function CreateView({ initialStep, onStepChange }: Props) {
         router.push("/lobby");
       }
     });
-
+    // Send the room creation request to the server with the selected playlist and configuration options
     gameWS.send({
       type: "room.create",
       data: {
@@ -155,7 +169,7 @@ export function CreateView({ initialStep, onStepChange }: Props) {
     }, 8000);
   }
 
-  // ── CONNECT ───────────────────────────────────────────────────────────────
+  // ── CONNECT ── //
   if (step === "connect") {
     return (
       <div className="w-full flex flex-col items-center gap-4">
@@ -210,7 +224,7 @@ export function CreateView({ initialStep, onStepChange }: Props) {
     );
   }
 
-  // ── PICK PLAYLIST ─────────────────────────────────────────────────────────
+  // ── PICK PLAYLIST ── //
   if (step === "pick-playlist") {
     return (
       <div className="flex flex-col gap-3 w-full">
@@ -235,7 +249,7 @@ export function CreateView({ initialStep, onStepChange }: Props) {
     );
   }
 
-  // ── CONFIGURE ─────────────────────────────────────────────────────────────
+  // ── CONFIGURE ── //
   return (
     <div className="flex flex-col gap-4 w-full">
       {profile && <UserProfileCard profile={profile} onLogout={handleLogout} />}

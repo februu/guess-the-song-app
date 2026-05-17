@@ -15,6 +15,9 @@ interface RoundInfo {
   duration: number;
 }
 
+// This is the main page component for the game. 
+// It manages the game state, handles WebSocket communication with the server, 
+// and renders the appropriate UI based on the current game phase (waiting, playing, reveal, ended)
 function getInitialRoomState(): RoomState | null {
   try {
     const raw = sessionStorage.getItem("room_state");
@@ -50,6 +53,7 @@ function GameContent() {
   const phaseRef       = useRef(phase);
   phaseRef.current     = phase;
 
+  // Prevents navigating back during the game, which could cause issues with the WebSocket connection and game state.
   useEffect(() => {
     if (mode !== "multiplayer") return;
     const path = window.location.pathname + window.location.search;
@@ -63,22 +67,33 @@ function GameContent() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [mode]);
 
+  // Handles the "Leave" button click: stops audio, disconnects from the game WebSocket, and navigates back to the home page
   function handleLeave() {
   audio.stop();
   gameWS.disconnect();
   router.push("/");
 }
+
+  // Handles the "Leave to lobby" button click: stops audio, disconnects from the game WebSocket, 
+  // and navigates back to the appropriate lobby page based on the game mode
   function handleLeaveToLobby() {
   audio.stop();
   gameWS.disconnect();
   router.push(mode === "singleplayer" ? "/singleplayer" : "/multiplayer");
 }
+
   function handleBackToLobby() { router.push("/lobby"); }
+
+  // Handles the "Play again" button click: stops audio, disconnects from the game WebSocket, 
+  // and navigates to the singleplayer page to start a new game
   function handlePlayAgain() { gameWS.disconnect(); router.push("/singleplayer"); }
 
+  // Handles volume changes by updating the local state and the audio player's volume, and muting if the volume is set to 0
   function handleVolumeChange(v: number) {
     setVolume(v); setMuted(v === 0); audio.setVolume(v);
   }
+
+  // Handles the "Toggle mute" button click: toggles the muted state and updates the audio player's volume accordingly
   function handleToggleMute() {
     const n = !muted; setMuted(n); audio.setVolume(n ? 0 : volume);
   }
@@ -94,7 +109,9 @@ function GameContent() {
       if (!msg.ok) { setWsError(msg.error?.message ?? "An error occurred"); return; }
 
       switch (msg.type) {
-        case "round.started": {
+        // When a new round starts, update the round information, 
+        // reset the guess and points, and start the timer for the round duration
+        case "round.started": { 
           const { round, total_rounds, duration } = msg.data;
           setRoundInfo({ round, totalRounds: total_rounds, duration });
           setPhase("playing");
@@ -106,23 +123,33 @@ function GameContent() {
           }, 1000);
           break;
         }
+        // When audio configuration is received for the round, 
+        // initialize the audio player with the specified sample rate and channels
         case "round.audio_config": {
           const { sampleRate, channels } = msg.data;
           channelsRef.current = channels;
           audio.init({ sampleRate, channels });
           break;
         }
+        // When audio playback is requested to stop for the round, 
+        // stop the audio player
         case "round.audio_stop": audio.stop(); break;
+        // When audio playback for the round ends, 
+        // perform any necessary cleanup
         case "round.audio_end": break;
+        // When a correct song guess is received, 
+        // update the guess result and points
         case "song.correct": {
           const result = msg.data as SongResult;
           setGuessResult("correct"); setPoints(result.points);
           break;
         }
+        // When an incorrect song guess is received,
         case "song.incorrect":
           setGuessResult("incorrect");
           setTimeout(() => setGuessResult(null), 1000);
           break;
+        // When the round ends, clear the round timer, stop the audio,
         case "round.ended": {
           clearInterval(timerRef.current!); audio.stop();
           const result = msg.data as SongResult;
@@ -134,7 +161,9 @@ function GameContent() {
           }, 3000);
           break;
         }
+        // When the room state is updated, unsubscribe from the WebSocket messages,
         case "room.updated": setRoomState(msg.data.state as RoomState); break;
+        // When the game starts, update the room state and set the phase to "playing"
         case "room.ended": {
           clearInterval(timerRef.current!); clearTimeout(revealTimerRef.current!);
           audio.stop();
@@ -144,6 +173,7 @@ function GameContent() {
       }
     });
 
+    // Register a binary message handler to play incoming audio chunks using the audio player
     const unsubBinary = gameWS.onBinary((buf) => audio.playChunk(buf, channelsRef.current));
 
     return () => {
@@ -154,6 +184,7 @@ function GameContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Handles the submission of a song guess: validates the guess, sends it to the server, and resets the guess input
   const submitGuess = useCallback(() => {
     const trimmed = guess.trim();
     if (!trimmed || guessResult === "correct" || phase !== "playing") return;
@@ -161,12 +192,12 @@ function GameContent() {
     setGuess("");
   }, [guess, guessResult, phase]);
 
-  const allMembers    = roomState?.members ?? [];
-  const scoreboard    = roomState?.scoreboard ?? {};
-  const sortedPlayers = [...allMembers].sort((a, b) => (scoreboard[b] ?? 0) - (scoreboard[a] ?? 0));
-  const myScore       = scoreboard[myNickname.current] ?? 0;
+  const allMembers    = roomState?.members ?? []; // List of all players in the room
+  const scoreboard    = roomState?.scoreboard ?? {}; // Current scores of all players in the room
+  const sortedPlayers = [...allMembers].sort((a, b) => (scoreboard[b] ?? 0) - (scoreboard[a] ?? 0)); // Players sorted by score, used for displaying the leaderboard
+  const myScore       = scoreboard[myNickname.current] ?? 0; // The current player's score, used for displaying their points during the game
 
-  // ── ENDED ─────────────────────────────────────────────────────────────────
+  // ── ENDED ── //
   if (phase === "ended" && roomState) {
     return (
       <main className="min-h-screen flex flex-col bg-background text-foreground overflow-hidden">
@@ -199,7 +230,7 @@ function GameContent() {
     );
   }
 
-  const isUrgent   = timeLeft <= 10;
+  const isUrgent   = timeLeft <= 10; 
   const timerWidth = roundInfo ? (timeLeft / roundInfo.duration) * 100 : 0;
 
   return (

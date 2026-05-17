@@ -8,6 +8,11 @@ interface Props {
   onClick: () => void;
 }
 
+// This component renders a single row in the playlist selection list. 
+// It displays the playlist's cover image, name, and track count (if available).
+// The row is clickable and calls the onClick callback when selected. 
+// The selected playlist is visually highlighted with a different background color.
+// used by frontend\app\multiplayer\_components\CreateView.tsx and frontend\app\singleplayer\page.tsx
 export function PlaylistRow({ playlist, selected, onClick }: Props) {
   return (
     <div
