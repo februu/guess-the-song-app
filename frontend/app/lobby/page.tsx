@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, startTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ThemeToggle } from "../theme-toggle";
 import { gameWS } from "@/lib/ws/client";
@@ -51,7 +51,7 @@ export default function LobbyPage() {
         if (state.playlist_img)  { setPlaylistImage(state.playlist_img);  sessionStorage.setItem("playlist_image", state.playlist_img); }
       }
 
-      if (msg.type === "room.started") router.push("/game?mode=multiplayer");
+      if (msg.type === "room.started") startTransition(() => router.push("/game?mode=multiplayer"));
     });
 
     return () => unsubscribe();

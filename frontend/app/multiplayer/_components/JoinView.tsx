@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, startTransition } from "react";
 import { useRouter } from "next/navigation";
 import { gameWS } from "@/lib/ws/client";
 import type { RoomState } from "@/lib/api/messages";
@@ -42,7 +42,7 @@ export function JoinView() {
         sessionStorage.setItem("room_state",   JSON.stringify(state));
         sessionStorage.setItem("my_nickname",  nickname);
         sessionStorage.setItem("is_host",      "false");
-        router.push("/lobby");
+        startTransition(() => router.push("/lobby"));
       }
     });
 

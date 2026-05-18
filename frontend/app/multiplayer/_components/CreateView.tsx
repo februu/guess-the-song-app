@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, startTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import {
@@ -149,7 +149,7 @@ export function CreateView({ initialStep, onStepChange }: Props) {
         sessionStorage.setItem("is_host",       "true");
         sessionStorage.setItem("playlist_name", selectedPlaylist.name);
         sessionStorage.setItem("playlist_image",selectedPlaylist.image_url ?? "");
-        router.push("/lobby");
+        startTransition(() => router.push("/lobby"));
       }
     });
     // Send the room creation request to the server with the selected playlist and configuration options
