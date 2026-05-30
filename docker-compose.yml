@@ -6,10 +6,6 @@ services:
       dockerfile: Dockerfile
     env_file: backend/.env
     environment:
-      # Set these in a .env at the project root for Cloudflare tunnel:
-      #   FRONTEND_URL=https://your-domain.com
-      #   SPOTIFY_REDIRECT_URI=https://your-domain.com/callback
-      #   DJANGO_ALLOWED_HOSTS=your-domain.com,localhost,127.0.0.1
       FRONTEND_URL: "${FRONTEND_URL:-http://localhost:3000}"
       SPOTIFY_REDIRECT_URI: "${SPOTIFY_REDIRECT_URI:-http://localhost:8000/callback}"
       DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}"
@@ -46,13 +42,6 @@ services:
     depends_on:
       - frontend
       - backend
-    restart: unless-stopped
-
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-    depends_on:
-      - caddy
     restart: unless-stopped
 
   postgres:
