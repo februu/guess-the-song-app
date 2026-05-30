@@ -6,16 +6,23 @@ services:
       dockerfile: Dockerfile
     env_file: backend/.env
     environment:
-      DB_DIR: /data
-      FRONTEND_URL: "${FRONTEND_URL:-http://${HOST_IP}:3000}"
-      SPOTIFY_REDIRECT_URI: "${SPOTIFY_REDIRECT_URI:-http://${HOST_IP}:8000/callback}"
-      DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-${HOST_IP},localhost,127.0.0.1}"
-    volumes:
-      - sqlite_data:/data
+      # Set these in a .env at the project root for Cloudflare tunnel:
+      #   FRONTEND_URL=https://your-domain.com
+      #   SPOTIFY_REDIRECT_URI=https://your-domain.com/callback
+      #   DJANGO_ALLOWED_HOSTS=your-domain.com,localhost,127.0.0.1
+      FRONTEND_URL: "${FRONTEND_URL:-http://localhost:3000}"
+      SPOTIFY_REDIRECT_URI: "${SPOTIFY_REDIRECT_URI:-http://localhost:8000/callback}"
+      DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}"
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: "${POSTGRES_DB:-guessthesong}"
+      POSTGRES_USER: "${POSTGRES_USER:-guessthesong}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
     ports:
-      - "0.0.0.0:8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     restart: unless-stopped
 
@@ -27,7 +34,7 @@ services:
         NEXT_PUBLIC_API_BASE: "${NEXT_PUBLIC_API_BASE:-}"
         NEXT_PUBLIC_BACKEND_WS_URL: "${NEXT_PUBLIC_BACKEND_WS_URL:-}"
     ports:
-      - "0.0.0.0:3000:3000"
+      - "127.0.0.1:3000:3000"
     restart: unless-stopped
 
   caddy:
@@ -39,6 +46,28 @@ services:
     depends_on:
       - frontend
       - backend
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - caddy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-guessthesong}"
+      POSTGRES_USER: "${POSTGRES_USER:-guessthesong}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-guessthesong}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   redis:
@@ -54,5 +83,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  sqlite_data:
+  postgres_data:
   redis_data:

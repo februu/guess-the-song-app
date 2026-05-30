@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from game.game.exceptions import GameAlreadyRunning, NoTracksAvailable
-from game.game.manager import GameManager
+from game.game.manager import GameManager, ROUND_DURATION, SCORE_MAX, SCORE_MIN
 from game.game.manager import (
     rm as manager_rm,
 )  # module-level RoomManager used inside GameManager
@@ -55,119 +55,104 @@ async def room_in_cache():
 
 
 # ---------------------------------------------------------------------------
-# submit_guess
+# process_guess
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestSubmitGuess:
-    async def test_no_active_round_is_silent(self, gm, mock_layer):
-        """When no round is active the call must return without sending anything."""
-        await gm.submit_guess(ROOM_CODE, "ch-host", "any guess", mock_layer)
-        mock_layer.send.assert_not_called()
-        mock_layer.group_send.assert_not_called()
+    async def test_no_active_round_returns_none(self, gm):
+        """When no round is active the call must return None."""
+        result = await gm.process_guess(ROOM_CODE, "ch-host", "any guess")
+        assert result is None
 
-    async def test_correct_guess_sends_song_correct(
-        self, gm, mock_layer, room_in_cache
-    ):
+    async def test_correct_guess_returns_song_info(self, gm, room_in_cache):
         gm._rounds[ROOM_CODE] = RoundState(TRACK, ["ch-host"])
-        await gm.submit_guess(ROOM_CODE, "ch-host", "Shape of You", mock_layer)
+        result = await gm.process_guess(ROOM_CODE, "ch-host", "Shape of You")
 
-        mock_layer.send.assert_called_once()
-        event = mock_layer.send.call_args[0][1]
-        assert event["event_type"] == "song.correct"
-        assert event["payload"]["title"] == "Shape of You"
-        assert event["payload"]["artist"] == "Ed Sheeran"
+        assert result is not None
+        assert result["correct"] is True
+        assert result["title"] == "Shape of You"
+        assert result["artist"] == "Ed Sheeran"
 
-    async def test_correct_guess_awards_100_to_first_guesser(
-        self, gm, mock_layer, room_in_cache
+    async def test_correct_guess_awards_max_points_when_instant(
+        self, gm, room_in_cache
     ):
+        """An immediate guess (elapsed≈0) should earn SCORE_MAX points."""
         gm._rounds[ROOM_CODE] = RoundState(TRACK, ["ch-host"])
-        await gm.submit_guess(ROOM_CODE, "ch-host", "Shape of You", mock_layer)
+        gm._rounds[ROOM_CODE].start_time = 0.0
 
-        event = mock_layer.send.call_args[0][1]
-        assert event["payload"]["points"] == 100
+        with patch("game.game.manager.time.monotonic", return_value=0.0):
+            result = await gm.process_guess(ROOM_CODE, "ch-host", "Shape of You")
 
-    async def test_incorrect_guess_sends_song_incorrect(
-        self, gm, mock_layer, room_in_cache
-    ):
+        assert result["points"] == SCORE_MAX
+
+    async def test_incorrect_guess_returns_not_correct(self, gm, room_in_cache):
         gm._rounds[ROOM_CODE] = RoundState(TRACK, ["ch-host"])
-        await gm.submit_guess(ROOM_CODE, "ch-host", "Totally Wrong", mock_layer)
+        result = await gm.process_guess(ROOM_CODE, "ch-host", "Totally Wrong")
 
-        mock_layer.send.assert_called_once()
-        event = mock_layer.send.call_args[0][1]
-        assert event["event_type"] == "song.incorrect"
+        assert result is not None
+        assert result["correct"] is False
 
-    async def test_already_guessed_correctly_is_ignored(
-        self, gm, mock_layer, room_in_cache
-    ):
+    async def test_already_guessed_correctly_returns_none(self, gm, room_in_cache):
         gm._rounds[ROOM_CODE] = RoundState(TRACK, ["ch-host"])
-        await gm.submit_guess(ROOM_CODE, "ch-host", "Shape of You", mock_layer)
-        mock_layer.send.reset_mock()
+        await gm.process_guess(ROOM_CODE, "ch-host", "Shape of You")
 
-        # Second attempt by same player should produce no response
-        await gm.submit_guess(ROOM_CODE, "ch-host", "Shape of You", mock_layer)
-        mock_layer.send.assert_not_called()
+        # Second attempt by same player should return None
+        result = await gm.process_guess(ROOM_CODE, "ch-host", "Shape of You")
+        assert result is None
 
-    async def test_second_correct_guesser_gets_85_points(
-        self, gm, mock_layer, room_in_cache
-    ):
+    async def test_later_guesser_gets_fewer_points(self, gm, room_in_cache):
+        """Points decrease with elapsed time — a later guess earns less."""
         room = await manager_rm._get_room(ROOM_CODE)
         room.members["ch-2"] = "Bob"
         await manager_rm._set_room(ROOM_CODE, room)
 
         gm._rounds[ROOM_CODE] = RoundState(TRACK, ["ch-host", "ch-2"])
-        await gm.submit_guess(ROOM_CODE, "ch-host", "Shape of You", mock_layer)
-        await gm.submit_guess(ROOM_CODE, "ch-2", "Shape of You", mock_layer)
+        gm._rounds[ROOM_CODE].start_time = 0.0
 
-        calls = mock_layer.send.call_args_list
-        points_by_channel = {
-            c[0][0]: c[0][1]["payload"].get("points")
-            for c in calls
-            if c[0][1].get("event_type") == "song.correct"
-        }
-        assert points_by_channel["ch-host"] == 100
-        assert points_by_channel["ch-2"] == 85
+        with patch("game.game.manager.time.monotonic", return_value=0.0):
+            result_first = await gm.process_guess(ROOM_CODE, "ch-host", "Shape of You")
 
-    async def test_points_floor_is_10(self, gm, mock_layer, room_in_cache):
-        """Even the 10th correct guesser should earn at least 10 points."""
-        channels = [f"ch-{i}" for i in range(10)]
-        room = await manager_rm._get_room(ROOM_CODE)
-        for ch in channels:
-            room.members[ch] = f"Player{ch[-1]}"
-        await manager_rm._set_room(ROOM_CODE, room)
+        with patch("game.game.manager.time.monotonic", return_value=ROUND_DURATION / 2):
+            result_second = await gm.process_guess(ROOM_CODE, "ch-2", "Shape of You")
 
-        gm._rounds[ROOM_CODE] = RoundState(TRACK, channels)
-        for ch in channels:
-            await gm.submit_guess(ROOM_CODE, ch, "Shape of You", mock_layer)
+        assert result_first["points"] > result_second["points"]
 
-        points_list = [
-            c[0][1]["payload"]["points"]
-            for c in mock_layer.send.call_args_list
-            if c[0][1].get("event_type") == "song.correct"
-        ]
-        assert min(points_list) == 10
-
-    async def test_scoreboard_updated_in_cache(self, gm, mock_layer, room_in_cache):
+    async def test_points_floor_is_score_min(self, gm, room_in_cache):
+        """A guess at the last possible second should earn exactly SCORE_MIN points."""
         gm._rounds[ROOM_CODE] = RoundState(TRACK, ["ch-host"])
-        await gm.submit_guess(ROOM_CODE, "ch-host", "Shape of You", mock_layer)
+        gm._rounds[ROOM_CODE].start_time = 0.0
+
+        with patch("game.game.manager.time.monotonic", return_value=float(ROUND_DURATION)):
+            result = await gm.process_guess(ROOM_CODE, "ch-host", "Shape of You")
+
+        assert result["points"] == SCORE_MIN
+
+    async def test_scoreboard_updated_in_cache(self, gm, room_in_cache):
+        gm._rounds[ROOM_CODE] = RoundState(TRACK, ["ch-host"])
+        gm._rounds[ROOM_CODE].start_time = 0.0
+
+        with patch("game.game.manager.time.monotonic", return_value=0.0):
+            await gm.process_guess(ROOM_CODE, "ch-host", "Shape of You")
 
         room = await manager_rm._get_room(ROOM_CODE)
-        assert room.scoreboard.get("ch-host") == 100
+        assert room.scoreboard.get("ch-host") == SCORE_MAX
 
-    async def test_cumulative_scoreboard_across_guesses(
-        self, gm, mock_layer, room_in_cache
-    ):
-        """Scoreboard should accumulate across multiple correct guesses in the same round."""
+    async def test_cumulative_scoreboard_across_guesses(self, gm, room_in_cache):
+        """Scoreboard should accumulate across multiple correct guesses."""
         room = await manager_rm._get_room(ROOM_CODE)
         room.scoreboard["ch-host"] = 50  # pre-existing score
         await manager_rm._set_room(ROOM_CODE, room)
 
         gm._rounds[ROOM_CODE] = RoundState(TRACK, ["ch-host"])
-        await gm.submit_guess(ROOM_CODE, "ch-host", "Shape of You", mock_layer)
+        gm._rounds[ROOM_CODE].start_time = 0.0
+
+        with patch("game.game.manager.time.monotonic", return_value=0.0):
+            await gm.process_guess(ROOM_CODE, "ch-host", "Shape of You")
 
         room = await manager_rm._get_room(ROOM_CODE)
-        assert room.scoreboard["ch-host"] == 150  # 50 + 100
+        assert room.scoreboard["ch-host"] == 50 + SCORE_MAX
 
 
 # ---------------------------------------------------------------------------

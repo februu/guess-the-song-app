@@ -31,15 +31,15 @@ class GameWebSocket {
       this.ws.binaryType = "arraybuffer"; 
 
       this.ws.onopen = () => resolve();
-      this.ws.onerror = () => reject(new Error("WebSocket connection failed"));
+      this.ws.onerror = (e) => { console.error("WebSocket error:", e); reject(new Error("WebSocket connection failed")); };
 
       this.ws.onmessage = (event) => {
         if (typeof event.data === "string") {
           try {
             const msg = JSON.parse(event.data) as ServerMessage;
             this.handlers.forEach((h) => h(msg));
-          } catch {
-            // ignore malformed messages
+          } catch (e) {
+            console.error("WS malformed message:", e, event.data);
           }
         } else if (event.data instanceof ArrayBuffer) {
           this.binaryHandlers.forEach((h) => h(event.data as ArrayBuffer));

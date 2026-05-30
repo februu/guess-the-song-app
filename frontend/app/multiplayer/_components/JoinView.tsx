@@ -25,8 +25,8 @@ export function JoinView() {
 
     setJoining(true); setError("");
 
-    try { await gameWS.connect(); } catch {
-      setError("Could not connect to server"); setJoining(false); return;
+    try { await gameWS.connect(); } catch (e) {
+      console.error("WS connect failed:", e); setError("Could not connect to server"); setJoining(false); return;
     }
 
     const unsubscribe = gameWS.onMessage((msg) => {

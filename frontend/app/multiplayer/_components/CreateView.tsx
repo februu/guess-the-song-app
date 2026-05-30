@@ -118,8 +118,8 @@ export function CreateView({ initialStep, onStepChange }: Props) {
 
     setCreating(true); setError("");
 
-    try { await gameWS.connect(); } catch {
-      setError("Could not connect to server"); setCreating(false); return;
+    try { await gameWS.connect(); } catch (e) {
+      console.error("WS connect failed:", e); setError("Could not connect to server"); setCreating(false); return;
     }
 
     const unsubscribe = gameWS.onMessage((msg) => {

@@ -173,19 +173,19 @@ class RoomManager:
 
     async def _reserve_code(self, code: str) -> bool:
         """Returns True if the code was successfully reserved, False if already taken."""
-        return await sync_to_async(cache.add)(f"room:{code}", {})
+        return await sync_to_async(cache.add)(f"room_{code}", {})
 
     async def _get_room(self, code: str) -> RoomState:
         """Retrieves room data by code, or raises RoomNotFound if not found."""
-        data = await sync_to_async(cache.get)(f"room:{code}")
+        data = await sync_to_async(cache.get)(f"room_{code}")
         if not data:
             raise RoomNotFound("Room with this code does not exist")
         return RoomState.from_json(data)
 
     async def _set_room(self, code: str, room: RoomState) -> None:
         """Saves the room state to the cache."""
-        await sync_to_async(cache.set)(f"room:{code}", room.to_json(), timeout=ROOM_TTL)
+        await sync_to_async(cache.set)(f"room_{code}", room.to_json(), timeout=ROOM_TTL)
 
     async def _delete_room(self, code: str) -> None:
         """Deletes a room by code."""
-        await sync_to_async(cache.delete)(f"room:{code}")
+        await sync_to_async(cache.delete)(f"room_{code}")

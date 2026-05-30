@@ -64,21 +64,22 @@ class GameManager:
         self._tasks[room_code] = task
         task.add_done_callback(lambda _: self._tasks.pop(room_code, None))
 
-    async def submit_guess(
-        self, room_code: str, channel_name: str, guess: str, channel_layer
-    ):
+    async def process_guess(
+        self, room_code: str, channel_name: str, guess: str
+    ) -> dict | None:
         """
-        Validates a guess and sends the player immediate feedback.
+        Validates a guess, updates scores, and returns the result.
+        Returns {"correct": True, "points": N, "title": ..., "artist": ..., "img": ...},
+        {"correct": False}, or None if there is no active round or the player already guessed.
         """
         round_state = self._rounds.get(room_code)
         if round_state is None:
-            return
+            return None
 
         if channel_name in round_state.correct_guesses_times:
-            return
+            return None
 
         correct = round_state.record_guess(channel_name, guess)
-
         if correct:
             elapsed = time.monotonic() - round_state.start_time
             ratio = max(0.0, min(1.0, elapsed / ROUND_DURATION))
@@ -94,34 +95,15 @@ class GameManager:
             except RoomNotFound:
                 pass
 
-            try:
-                await channel_layer.send(
-                    channel_name,
-                    {
-                        "type": "room_event",
-                        "event_type": "song.correct",
-                        "payload": {
-                            "points": points,
-                            "title": round_state.track["name"],
-                            "artist": ", ".join(round_state.track.get("artists", [])),
-                            "img": round_state.track.get("image_url"),
-                        },
-                    },
-                )
-            except ChannelFull:
-                pass
-        else:
-            try:
-                await channel_layer.send(
-                    channel_name,
-                    {
-                        "type": "room_event",
-                        "event_type": "song.incorrect",
-                        "payload": {},
-                    },
-                )
-            except ChannelFull:
-                pass
+            return {
+                "correct": True,
+                "points": points,
+                "title": round_state.track["name"],
+                "artist": ", ".join(round_state.track.get("artists", [])),
+                "img": round_state.track.get("image_url"),
+            }
+
+        return {"correct": False}
 
     def player_left(self, room_code: str, channel_name: str):
         """
@@ -148,7 +130,10 @@ class GameManager:
             return await asyncio.wait_for(
                 resolve_youtube_query(query), timeout=PREFETCH_TIMEOUT
             )
-        except Exception:
+        except Exception as e:
+            print(
+                f"[_prefetch_url] FAILED for query '{query}': {type(e).__name__}: {e}"
+            )
             return None
 
     async def _game_loop(self, room_code: str, channel_layer, tracks: list[dict]):
@@ -179,8 +164,16 @@ class GameManager:
                         self._prefetch_url(tracks[i + 1]),
                         asyncio.sleep(ROUND_BREAK),
                     )
-        except (asyncio.CancelledError, RoomNotFound):
+        except asyncio.CancelledError:
             return
+        except RoomNotFound as e:
+            print(f"[_game_loop] RoomNotFound for room '{room_code}': {e}")
+            return
+        except Exception as e:
+            print(
+                f"[_game_loop] UNEXPECTED ERROR in room '{room_code}': {type(e).__name__}: {e}"
+            )
+            raise
         finally:
             self._rounds.pop(room_code, None)
 
@@ -279,7 +272,10 @@ class GameManager:
                 url, duration = await resolve_youtube_query(query)
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as e:
+                print(
+                    f"[_stream_audio] YouTube resolution FAILED for query '{query}': {type(e).__name__}: {e}"
+                )
                 return
 
         # Seek to 25% of the track, but never so late that less than 30s remains.
@@ -290,18 +286,20 @@ class GameManager:
         ffmpeg = await asyncio.create_subprocess_exec(
             "ffmpeg",
             "-ss",
-            str(seek_pos),
+            str(
+                seek_pos
+            ),  # seek to this position before reading (fast keyframe seek when before -i)
             "-i",
-            url,
+            url,  # input: remote stream URL
             "-f",
-            "s16le",
+            "s16le",  # output format: raw PCM, 16-bit signed little-endian (no container)
             "-ar",
-            str(SAMPLE_RATE),
+            str(SAMPLE_RATE),  # sample rate (e.g. 44100 Hz)
             "-ac",
-            str(CHANNELS),
-            "pipe:1",
+            str(CHANNELS),  # number of audio channels (1=mono, 2=stereo)
+            "pipe:1",  # write output to stdout so Python can read it directly
             "-loglevel",
-            "quiet",
+            "quiet",  # suppress all ffmpeg console output
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )

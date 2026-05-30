@@ -11,9 +11,15 @@ _FUZZY_THRESHOLD = 0.8
 
 def _normalize_tokens(text: str) -> list[str]:
     """Converts text to a list of normalized tokens for matching guesses to answers."""
-    text = re.sub(r"[\(\[].*?[\)\]]", "", text)   # drop (Remix) / [Extended Mix]
-    text = re.sub(r"\s+-\s+.*$", "", text)         # drop " - Remix" / " - Original Mix" suffixes
-    text = re.sub(r"[^\w\s']", " ", text)
+    text = re.sub(
+        r"[\(\[].*?[\)\]]", "", text
+    )  # strip parenthetical/bracketed notes e.g. "(feat. X)", "[Live]"
+    text = re.sub(
+        r"\s+-\s+.*$", "", text
+    )  # strip " - subtitle" suffixes e.g. "Song - Remastered 2011"
+    text = re.sub(
+        r"[^\w\s']", " ", text
+    )  # replace punctuation (except apostrophes) with spaces
     return [w for w in text.lower().split() if w not in _FILLER_WORDS]
 
 
@@ -41,7 +47,9 @@ class RoomState:
     playlist_name: str = ""  # name of the playlist
     playlist_img: str = ""  # URL of the playlist image
     started: bool = False  # whether the game has started or not
-    ready_players: list = field(default_factory=list)  # channel_names of players who marked themselves ready
+    ready_players: list = field(
+        default_factory=list
+    )  # channel_names of players who marked themselves ready
 
     def to_json(self) -> str:
         return json.dumps(asdict(self))
@@ -64,7 +72,9 @@ class PublicRoomState:
     started: bool = False  # whether the game has started or not
     rounds: int = 0  # number of rounds to play in the game
     current_round: int = 0  # the current round number (starting from 0)
-    ready_players: list = field(default_factory=list)  # usernames of players who marked themselves ready
+    ready_players: list = field(
+        default_factory=list
+    )  # usernames of players who marked themselves ready
 
     def to_json(self) -> str:
         return json.dumps(asdict(self))

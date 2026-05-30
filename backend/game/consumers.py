@@ -33,10 +33,12 @@ class GameConsumer(AsyncWebsocketConsumer):
         }
 
     async def connect(self):
+        """Initializes the WebSocket connection and sets up the initial state."""
         self.room_code = None
         await self.accept()
 
     async def disconnect(self, code):
+        """Cleans up when the WebSocket connection is closed, ensuring the player leaves any room they were in."""
         if self.room_code:
             try:
                 await rm.leave_room(
@@ -47,6 +49,7 @@ class GameConsumer(AsyncWebsocketConsumer):
             gm.player_left(self.room_code, self.channel_name)
 
     async def receive(self, text_data=None, bytes_data=None):
+        """Handles incoming WebSocket messages, routing them to the appropriate handler based on the 'type' field in the JSON payload."""
         if text_data is None:
             return
         data = json.loads(text_data)
@@ -162,7 +165,7 @@ class GameConsumer(AsyncWebsocketConsumer):
         self.room_code = code
 
     # room.ready
-    async def on_room_ready(self, data):
+    async def on_room_ready(self, _data):
         if self.room_code is None:
             await self.send_error("not_in_room", "Not in a room")
             return
@@ -176,7 +179,7 @@ class GameConsumer(AsyncWebsocketConsumer):
             await self.send_error("room_started", str(e))
 
     # room.start
-    async def on_room_start(self, data):
+    async def on_room_start(self, _data):
         if self.room_code is None:
             await self.send_error("not_in_room", "Not in a room")
             return
@@ -211,9 +214,23 @@ class GameConsumer(AsyncWebsocketConsumer):
                 "guess_too_long", "Guess must be less than 100 characters"
             )
             return
-        await gm.submit_guess(
-            self.room_code, self.channel_name, data["guess"], self.channel_layer
+        result = await gm.process_guess(
+            self.room_code, self.channel_name, data["guess"]
         )
+        if result is None:
+            return
+        if result["correct"]:
+            await self.send_message(
+                "song.correct",
+                {
+                    "points": result["points"],
+                    "title": result["title"],
+                    "artist": result["artist"],
+                    "img": result["img"],
+                },
+            )
+        else:
+            await self.send_message("song.incorrect", {})
 
     # ------------------------------- #
     #         Channel Layer           #
