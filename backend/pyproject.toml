@@ -12,6 +12,7 @@ dependencies = [
     "httpx>=0.28.1",
     "python-dotenv>=1.2.2",
     "yt-dlp>=2026.3.17",
+    "psycopg[binary]>=3.2",
 ]
 
 [dependency-groups]

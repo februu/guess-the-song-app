@@ -7,6 +7,7 @@ API_BASE = "https://api.spotify.com/v1"
 
 
 async def get_valid_token(user) -> str:
+    """Returns a valid Spotify access token for the given user, refreshing it if necessary."""
     from ..models import SpotifyToken
 
     token_obj = await SpotifyToken.objects.aget(user=user)
@@ -36,6 +37,7 @@ async def get_valid_token(user) -> str:
 
 
 async def get_playlists(user) -> list[dict]:
+    """Returns list of dicts with keys 'id', 'name', 'image_url'."""
     if not getattr(user, "is_authenticated", False):
         raise ValueError("authenticated user required")
 
@@ -68,6 +70,7 @@ async def get_playlists(user) -> list[dict]:
 
 
 async def get_playlist_details(user, playlist_id: str) -> dict:
+    """Returns dict with keys 'id', 'name', 'image_url'."""
     if not getattr(user, "is_authenticated", False):
         raise ValueError("authenticated user required")
 
@@ -88,6 +91,7 @@ async def get_playlist_details(user, playlist_id: str) -> dict:
 
 
 async def get_user_profile(user) -> dict:
+    """Returns dict with keys 'id', 'display_name', 'profile_image_url'."""
     if not getattr(user, "is_authenticated", False):
         raise ValueError("authenticated user required")
 
@@ -107,6 +111,7 @@ async def get_user_profile(user) -> dict:
 
 
 async def get_playlist_tracks(user, playlist_id: str) -> list[dict]:
+    """Returns list of dicts with keys 'id', 'name', 'artists' (list of names), 'image_url'."""
     if not getattr(user, "is_authenticated", False):
         raise ValueError("authenticated user required")
 

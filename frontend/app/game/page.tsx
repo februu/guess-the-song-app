@@ -106,7 +106,8 @@ function GameContent() {
 
   useEffect(() => {
     const unsub = gameWS.onMessage((msg) => {
-      if (!msg.ok) { setWsError(msg.error?.message ?? "An error occurred"); return; }
+      console.log("[game] WS message received:", msg.type ?? JSON.stringify(msg));
+      if (!msg.ok) { console.warn("[game] WS error message:", msg); setWsError(msg.error?.message ?? "An error occurred"); return; }
 
       switch (msg.type) {
         // When a new round starts, update the round information, 
@@ -141,11 +142,13 @@ function GameContent() {
         // update the guess result and points
         case "song.correct": {
           const result = msg.data as SongResult;
+          console.log("[game] song.correct received:", result);
           setGuessResult("correct"); setPoints(result.points);
           break;
         }
         // When an incorrect song guess is received,
         case "song.incorrect":
+          console.log("[game] song.incorrect received");
           setGuessResult("incorrect");
           setTimeout(() => setGuessResult(null), 1000);
           break;
@@ -187,8 +190,10 @@ function GameContent() {
   // Handles the submission of a song guess: validates the guess, sends it to the server, and resets the guess input
   const submitGuess = useCallback(() => {
     const trimmed = guess.trim();
+    console.log("[submitGuess] phase:", phase, "guessResult:", guessResult, "trimmed:", trimmed, "wsConnected:", gameWS.isConnected());
     if (!trimmed || guessResult === "correct" || phase !== "playing") return;
     gameWS.send({ type: "song.guess", data: { guess: trimmed } });
+    console.log("[submitGuess] sent song.guess:", trimmed);
     setGuess("");
   }, [guess, guessResult, phase]);
 

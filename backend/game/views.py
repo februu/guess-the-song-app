@@ -22,6 +22,7 @@ SCOPES = "playlist-read-private playlist-read-collaborative"
 
 @require_GET
 def spotify_login(request):
+    """Redirect the user to Spotify's OAuth2 authorization page with a CSRF state token."""
     state = secrets.token_urlsafe(16)
     cache.set(f"spotify_state_{state}", True, timeout=300)
 
@@ -39,6 +40,7 @@ def spotify_login(request):
 
 @require_GET
 def spotify_logout(request):
+    """Revoke the user's Spotify token, end their session, and delete their account."""
     if request.user.is_authenticated:
         SpotifyToken.objects.filter(user=request.user).delete()
         user = request.user
@@ -49,6 +51,7 @@ def spotify_logout(request):
 
 @require_GET
 async def spotify_playlists(request):
+    """Return the authenticated user's Spotify playlists."""
     user = await request.auser()
     if not user.is_authenticated:
         return JsonResponse(
@@ -87,6 +90,7 @@ async def spotify_playlists(request):
 
 @require_GET
 async def spotify_user_profile(request):
+    """Return the authenticated user's Spotify profile data."""
     user = await request.auser()
     if not user.is_authenticated:
         return JsonResponse(
@@ -125,14 +129,20 @@ async def spotify_user_profile(request):
 
 @require_GET
 async def spotify_callback(request):
+    """
+    Handle Spotify's OAuth2 redirect, exchange the authorization code for tokens,
+    create or retrieve the local user, and log them in.
+    """
     frontend_url = settings.FRONTEND_URL
 
+    # Reject if Spotify reported an error
     if request.GET.get("error"):
         return redirect(f"{frontend_url}?auth_error={request.GET.get('error')}")
 
     code = request.GET.get("code")
     state = request.GET.get("state")
 
+    # Validate CSRF state token that was stored in cache during spotify_login
     if not code or not state:
         return redirect(f"{frontend_url}?auth_error=missing_code_or_state")
 
@@ -143,6 +153,7 @@ async def spotify_callback(request):
     await cache.adelete(f"spotify_state_{state}")  # type: ignore[attr-defined]
 
     async with httpx.AsyncClient() as client:
+        # Exchange the one-time authorization code for access + refresh tokens
         token_resp = await client.post(
             SPOTIFY_TOKEN_URL,
             data={
@@ -165,6 +176,7 @@ async def spotify_callback(request):
         if not access_token or not refresh_token or not expires_in:
             return redirect(f"{frontend_url}?auth_error=invalid_token_response")
 
+        # Fetch the Spotify user's ID
         profile_resp = await client.get(
             "https://api.spotify.com/v1/me",
             headers={"Authorization": f"Bearer {access_token}"},
@@ -177,6 +189,7 @@ async def spotify_callback(request):
     if not spotify_user_id:
         return redirect(f"{frontend_url}?auth_error=invalid_spotify_profile")
 
+    # Create or retrieve the local Django user tied to this Spotify account
     User = get_user_model()
     username = f"spotify_{spotify_user_id}"[:150]
     user, created = await User.objects.aget_or_create(username=username)
@@ -186,6 +199,7 @@ async def spotify_callback(request):
 
     await alogin(request, user)
 
+    # Persist the tokens so future API calls can refresh them as needed
     await SpotifyToken.objects.aupdate_or_create(
         user=user,
         defaults={

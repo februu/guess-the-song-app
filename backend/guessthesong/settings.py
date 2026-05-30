@@ -28,15 +28,18 @@ SPOTIFY_REDIRECT_URI = os.environ.get("SPOTIFY_REDIRECT_URI")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 REDIS_URL = os.environ.get("REDIS_URL")
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
+_frontend_host = (
+    FRONTEND_URL.replace("http://", "").replace("https://", "").split("/")[0].split(":")[0]
+)
+# DJANGO_ALLOWED_HOSTS takes precedence; falls back to frontend host + localhost.
+# For Cloudflare tunnel set: DJANGO_ALLOWED_HOSTS=your-domain.com,localhost,127.0.0.1
+_default_hosts = ",".join(filter(None, [_frontend_host, "localhost", "127.0.0.1"]))
 ALLOWED_HOSTS = [
-    FRONTEND_URL.replace("http://", "")
-    .replace("https://", "")
-    .split("/")[0]
-    .split(":")[0],
-    "localhost",
+    h.strip()
+    for h in os.environ.get("DJANGO_ALLOWED_HOSTS", _default_hosts).split(",")
+    if h.strip()
 ]
 
 
@@ -106,8 +109,12 @@ CHANNEL_LAYERS = {
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("POSTGRES_DB", "guessthesong"),
+        "USER": os.environ.get("POSTGRES_USER", "guessthesong"),
+        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
+        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
+        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     }
 }
 
@@ -147,12 +154,22 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# CORS
-CORS_ALLOWED_ORIGINS = [FRONTEND_URL.split("/")[0] + "//" + FRONTEND_URL.split("/")[2]]
+# CORS — derive origin from FRONTEND_URL, but allow explicit override via env var.
+# For Cloudflare tunnel: CORS_ALLOWED_ORIGINS=https://your-domain.com
+_frontend_origin = FRONTEND_URL.split("/")[0] + "//" + FRONTEND_URL.split("/")[2]
+_cors_env = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+CORS_ALLOWED_ORIGINS = (
+    [o.strip() for o in _cors_env.split(",") if o.strip()]
+    if _cors_env
+    else [_frontend_origin]
+)
 CORS_ALLOW_CREDENTIALS = True
 
-# Session cookie is sent cross-origin in production (requires HTTPS).
-# In development both services run on localhost so SameSite=Lax already works.
-SESSION_COOKIE_SAMESITE = "None" if not DEBUG else "Lax"
-SESSION_COOKIE_SECURE = not DEBUG
+# Session cookies require Secure + SameSite=None for cross-origin requests (HTTPS only).
+_https = FRONTEND_URL.startswith("https://")
+SESSION_COOKIE_SAMESITE = "None" if _https else "Lax"
+SESSION_COOKIE_SECURE = _https
+
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS

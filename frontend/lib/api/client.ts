@@ -1,7 +1,6 @@
-// All requests go directly to the backend.
-// The browser sends the session cookie automatically via credentials: "include"
-// because the cookie is stored for 127.0.0.1:8000.
-export const API_BASE = "http://127.0.0.1:8000";
+// In production (nginx), API calls are same-origin so API_BASE is empty.
+// In development, set NEXT_PUBLIC_API_BASE=http://127.0.0.1:8000 or rely on the default.
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000";
 
 export class ApiError extends Error {
   constructor(

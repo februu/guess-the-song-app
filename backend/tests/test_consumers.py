@@ -6,8 +6,6 @@ Channel layer uses the real Redis channel layer (DB 15).
 Spotify and YouTube services are mocked throughout.
 """
 
-import asyncio
-import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -15,7 +13,6 @@ from channels.testing import WebsocketCommunicator
 
 from game.game.manager import GameManager
 from game.game.manager import rm as manager_rm
-from game.game.types import RoomState
 from guessthesong.asgi import application
 
 # Increase receive timeout for all tests — local Redis is fast but not instant.
@@ -32,7 +29,9 @@ async def recv(comm: WebsocketCommunicator):
     return await comm.receive_json_from(timeout=RECV_TIMEOUT)
 
 
-async def recv_until(comm: WebsocketCommunicator, event_type: str, max_messages: int = 10):
+async def recv_until(
+    comm: WebsocketCommunicator, event_type: str, max_messages: int = 10
+):
     """Drain up to `max_messages` from the communicator and return the first whose type matches."""
     for _ in range(max_messages):
         msg = await recv(comm)
@@ -81,12 +80,14 @@ class TestRoomCreate:
         comm = WebsocketCommunicator(application, "ws/game/")
         await comm.connect()
 
-        await comm.send_json_to({
-            "type": "room.create",
-            "playlist_id": "pl-123",
-            "rounds": 5,
-            "name": "Alice",
-        })
+        await comm.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-123",
+                "rounds": 5,
+                "name": "Alice",
+            }
+        )
         response = await recv(comm)
 
         assert response["ok"] is True
@@ -112,7 +113,9 @@ class TestRoomCreate:
     async def test_create_room_missing_rounds(self):
         comm = WebsocketCommunicator(application, "ws/game/")
         await comm.connect()
-        await comm.send_json_to({"type": "room.create", "playlist_id": "pl-1", "name": "Alice"})
+        await comm.send_json_to(
+            {"type": "room.create", "playlist_id": "pl-1", "name": "Alice"}
+        )
         response = await recv(comm)
         assert response["ok"] is False
         assert response["error"]["code"] == "missing_rounds"
@@ -121,7 +124,9 @@ class TestRoomCreate:
     async def test_create_room_missing_name(self):
         comm = WebsocketCommunicator(application, "ws/game/")
         await comm.connect()
-        await comm.send_json_to({"type": "room.create", "playlist_id": "pl-1", "rounds": 5})
+        await comm.send_json_to(
+            {"type": "room.create", "playlist_id": "pl-1", "rounds": 5}
+        )
         response = await recv(comm)
         assert response["ok"] is False
         assert response["error"]["code"] == "missing_name"
@@ -130,9 +135,14 @@ class TestRoomCreate:
     async def test_create_room_invalid_username(self):
         comm = WebsocketCommunicator(application, "ws/game/")
         await comm.connect()
-        await comm.send_json_to({
-            "type": "room.create", "playlist_id": "pl-1", "rounds": 5, "name": "ab",
-        })
+        await comm.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-1",
+                "rounds": 5,
+                "name": "ab",
+            }
+        )
         response = await recv(comm)
         assert response["ok"] is False
         assert response["error"]["code"] == "invalid_username"
@@ -141,9 +151,14 @@ class TestRoomCreate:
     async def test_create_room_invalid_rounds(self):
         comm = WebsocketCommunicator(application, "ws/game/")
         await comm.connect()
-        await comm.send_json_to({
-            "type": "room.create", "playlist_id": "pl-1", "rounds": 99, "name": "Alice",
-        })
+        await comm.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-1",
+                "rounds": 99,
+                "name": "Alice",
+            }
+        )
         response = await recv(comm)
         assert response["ok"] is False
         assert response["error"]["code"] == "invalid_rounds"
@@ -153,7 +168,12 @@ class TestRoomCreate:
         comm = WebsocketCommunicator(application, "ws/game/")
         await comm.connect()
 
-        create_msg = {"type": "room.create", "playlist_id": "pl-1", "rounds": 5, "name": "Alice"}
+        create_msg = {
+            "type": "room.create",
+            "playlist_id": "pl-1",
+            "rounds": 5,
+            "name": "Alice",
+        }
         await comm.send_json_to(create_msg)
         await recv(comm)  # consume room.updated
 
@@ -180,14 +200,21 @@ class TestRoomJoin:
         await comm_b.connect()
 
         # A creates the room
-        await comm_a.send_json_to({
-            "type": "room.create", "playlist_id": "pl-1", "rounds": 3, "name": "Alice",
-        })
+        await comm_a.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-1",
+                "rounds": 3,
+                "name": "Alice",
+            }
+        )
         r = await recv(comm_a)
         room_code = r["data"]["state"]["code"]
 
         # B joins
-        await comm_b.send_json_to({"type": "room.join", "code": room_code, "name": "Bob"})
+        await comm_b.send_json_to(
+            {"type": "room.join", "code": room_code, "name": "Bob"}
+        )
 
         # Both A and B should receive room.updated with 2 members
         r_a = await recv_until(comm_a, "room.updated")
@@ -240,9 +267,14 @@ class TestRoomJoin:
         await comm_a.connect()
         await comm_b.connect()
 
-        await comm_a.send_json_to({
-            "type": "room.create", "playlist_id": "pl-1", "rounds": 1, "name": "Alice",
-        })
+        await comm_a.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-1",
+                "rounds": 1,
+                "name": "Alice",
+            }
+        )
         r = await recv(comm_a)
         code = r["data"]["state"]["code"]
 
@@ -263,13 +295,20 @@ class TestRoomJoin:
         comm = WebsocketCommunicator(application, "ws/game/")
         await comm.connect()
         # First create a room (so consumer is now in one)
-        await comm.send_json_to({
-            "type": "room.create", "playlist_id": "pl-1", "rounds": 3, "name": "Alice",
-        })
+        await comm.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-1",
+                "rounds": 3,
+                "name": "Alice",
+            }
+        )
         await recv(comm)  # consume room.updated
 
         # Try to join — should reject since already in a room
-        await comm.send_json_to({"type": "room.join", "code": "AAAAAA", "name": "Alice2"})
+        await comm.send_json_to(
+            {"type": "room.join", "code": "AAAAAA", "name": "Alice2"}
+        )
         response = await recv(comm)
         assert response["ok"] is False
         assert response["error"]["code"] == "already_in_room"
@@ -299,9 +338,14 @@ class TestRoomStart:
         await comm_a.connect()
         await comm_b.connect()
 
-        await comm_a.send_json_to({
-            "type": "room.create", "playlist_id": "pl-1", "rounds": 1, "name": "Alice",
-        })
+        await comm_a.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-1",
+                "rounds": 1,
+                "name": "Alice",
+            }
+        )
         r = await recv(comm_a)
         code = r["data"]["state"]["code"]
 
@@ -324,9 +368,14 @@ class TestRoomStart:
         comm = WebsocketCommunicator(application, "ws/game/")
         await comm.connect()
 
-        await comm.send_json_to({
-            "type": "room.create", "playlist_id": "pl-1", "rounds": 1, "name": "Alice",
-        })
+        await comm.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-1",
+                "rounds": 1,
+                "name": "Alice",
+            }
+        )
         await recv(comm)  # room.updated
 
         with patch("game.game.manager.gm.start_game", new_callable=AsyncMock):
@@ -361,9 +410,14 @@ class TestSongGuess:
         comm = WebsocketCommunicator(application, "ws/game/")
         await comm.connect()
 
-        await comm.send_json_to({
-            "type": "room.create", "playlist_id": "pl-1", "rounds": 1, "name": "Alice",
-        })
+        await comm.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-1",
+                "rounds": 1,
+                "name": "Alice",
+            }
+        )
         await recv(comm)
 
         await comm.send_json_to({"type": "song.guess"})
@@ -377,9 +431,14 @@ class TestSongGuess:
         comm = WebsocketCommunicator(application, "ws/game/")
         await comm.connect()
 
-        await comm.send_json_to({
-            "type": "room.create", "playlist_id": "pl-1", "rounds": 1, "name": "Alice",
-        })
+        await comm.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-1",
+                "rounds": 1,
+                "name": "Alice",
+            }
+        )
         await recv(comm)
 
         await comm.send_json_to({"type": "song.guess", "guess": "x" * 100})
@@ -394,9 +453,14 @@ class TestSongGuess:
         comm = WebsocketCommunicator(application, "ws/game/")
         await comm.connect()
 
-        await comm.send_json_to({
-            "type": "room.create", "playlist_id": "pl-1", "rounds": 1, "name": "Alice",
-        })
+        await comm.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-1",
+                "rounds": 1,
+                "name": "Alice",
+            }
+        )
         await recv(comm)
 
         # Game not started so there's no RoundState
@@ -426,18 +490,24 @@ class TestFullGameFlow:
         await comm.connect()
 
         # 1. Create room
-        await comm.send_json_to({
-            "type": "room.create",
-            "playlist_id": "pl-abc",
-            "rounds": 1,
-            "name": "Alice",
-        })
+        await comm.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-abc",
+                "rounds": 1,
+                "name": "Alice",
+            }
+        )
         r = await recv(comm)
         assert r["type"] == "room.updated"
 
         # 2. Start game — mock Spotify and skip audio streaming
-        with patch("game.game.manager.get_playlist_tracks", return_value=[SAMPLE_TRACK]):
-            with patch.object(GameManager, "_stream_audio", new=AsyncMock(return_value=None)):
+        with patch(
+            "game.game.manager.get_playlist_tracks", return_value=[SAMPLE_TRACK]
+        ):
+            with patch.object(
+                GameManager, "_stream_audio", new=AsyncMock(return_value=None)
+            ):
                 await comm.send_json_to({"type": "room.start"})
 
                 # 3. Receive room.updated (started=True) and room.started
@@ -474,18 +544,29 @@ class TestFullGameFlow:
         comm = WebsocketCommunicator(application, "ws/game/")
         await comm.connect()
 
-        await comm.send_json_to({
-            "type": "room.create", "playlist_id": "pl-1", "rounds": 1, "name": "Alice",
-        })
+        await comm.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-1",
+                "rounds": 1,
+                "name": "Alice",
+            }
+        )
         await recv(comm)
 
-        with patch("game.game.manager.get_playlist_tracks", return_value=[SAMPLE_TRACK]):
-            with patch.object(GameManager, "_stream_audio", new=AsyncMock(return_value=None)):
+        with patch(
+            "game.game.manager.get_playlist_tracks", return_value=[SAMPLE_TRACK]
+        ):
+            with patch.object(
+                GameManager, "_stream_audio", new=AsyncMock(return_value=None)
+            ):
                 await comm.send_json_to({"type": "room.start"})
                 await recv_until(comm, "round.started")
 
                 # Wrong guess
-                await comm.send_json_to({"type": "song.guess", "guess": "totally wrong"})
+                await comm.send_json_to(
+                    {"type": "song.guess", "guess": "totally wrong"}
+                )
                 r = await recv_until(comm, "song.incorrect")
                 assert r["ok"] is True
 
@@ -505,9 +586,14 @@ class TestFullGameFlow:
         await comm_b.connect()
 
         # A creates room
-        await comm_a.send_json_to({
-            "type": "room.create", "playlist_id": "pl-1", "rounds": 1, "name": "Alice",
-        })
+        await comm_a.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-1",
+                "rounds": 1,
+                "name": "Alice",
+            }
+        )
         r = await recv(comm_a)
         code = r["data"]["state"]["code"]
 
@@ -516,8 +602,12 @@ class TestFullGameFlow:
         await recv_until(comm_a, "room.updated")
         await recv_until(comm_b, "room.updated")
 
-        with patch("game.game.manager.get_playlist_tracks", return_value=[SAMPLE_TRACK]):
-            with patch.object(GameManager, "_stream_audio", new=AsyncMock(return_value=None)):
+        with patch(
+            "game.game.manager.get_playlist_tracks", return_value=[SAMPLE_TRACK]
+        ):
+            with patch.object(
+                GameManager, "_stream_audio", new=AsyncMock(return_value=None)
+            ):
                 await comm_a.send_json_to({"type": "room.start"})
 
                 await recv_until(comm_a, "room.started")
@@ -526,12 +616,16 @@ class TestFullGameFlow:
                 await recv_until(comm_b, "round.started")
 
                 # A guesses correctly first
-                await comm_a.send_json_to({"type": "song.guess", "guess": "Shape of You"})
+                await comm_a.send_json_to(
+                    {"type": "song.guess", "guess": "Shape of You"}
+                )
                 r_a = await recv_until(comm_a, "song.correct")
                 assert r_a["data"]["points"] == 100
 
                 # B guesses correctly second
-                await comm_b.send_json_to({"type": "song.guess", "guess": "Shape of You"})
+                await comm_b.send_json_to(
+                    {"type": "song.guess", "guess": "Shape of You"}
+                )
                 r_b = await recv_until(comm_b, "song.correct")
                 assert r_b["data"]["points"] == 85
 
@@ -557,9 +651,14 @@ class TestFullGameFlow:
         await comm_a.connect()
         await comm_b.connect()
 
-        await comm_a.send_json_to({
-            "type": "room.create", "playlist_id": "pl-1", "rounds": 1, "name": "Alice",
-        })
+        await comm_a.send_json_to(
+            {
+                "type": "room.create",
+                "playlist_id": "pl-1",
+                "rounds": 1,
+                "name": "Alice",
+            }
+        )
         r = await recv(comm_a)
         code = r["data"]["state"]["code"]
 
@@ -567,14 +666,20 @@ class TestFullGameFlow:
         await recv_until(comm_a, "room.updated")
         await recv_until(comm_b, "room.updated")
 
-        with patch("game.game.manager.get_playlist_tracks", return_value=[SAMPLE_TRACK]):
-            with patch.object(GameManager, "_stream_audio", new=AsyncMock(return_value=None)):
+        with patch(
+            "game.game.manager.get_playlist_tracks", return_value=[SAMPLE_TRACK]
+        ):
+            with patch.object(
+                GameManager, "_stream_audio", new=AsyncMock(return_value=None)
+            ):
                 await comm_a.send_json_to({"type": "room.start"})
                 await recv_until(comm_a, "round.started")
                 await recv_until(comm_b, "round.started")
 
                 # A guesses correctly
-                await comm_a.send_json_to({"type": "song.guess", "guess": "Shape of You"})
+                await comm_a.send_json_to(
+                    {"type": "song.guess", "guess": "Shape of You"}
+                )
                 await recv_until(comm_a, "song.correct")
 
                 # B disconnects without guessing — should trigger round end

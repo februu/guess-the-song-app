@@ -132,8 +132,8 @@ export function CreateView({ initialStep, onStepChange }: Props) {
 
     setCreating(true); setError("");
 
-    try { await gameWS.connect(); } catch {
-      setError("Could not connect to server"); setCreating(false); return;
+    try { await gameWS.connect(); } catch (e) {
+      console.error("WS connect failed:", e); setError("Could not connect to server"); setCreating(false); return;
     }
     // Listen for server responses to the room creation request. On success, save the room state and navigate to the lobby.
     const unsubscribe = gameWS.onMessage((msg) => {
