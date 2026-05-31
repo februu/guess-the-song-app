@@ -1,26 +1,27 @@
-yourdomain.com {
+# This should be replaced with real domain in real prod environment
+:8080 {
 
     # Django Channels WebSocket
     handle /ws/* {
-        reverse_proxy localhost:8000
+        reverse_proxy backend:8000
     }
 
     # Django: Spotify OAuth, callback, admin, static files
     handle /spotify/* {
-        reverse_proxy localhost:8000
+        reverse_proxy backend:8000
     }
     handle /callback* {
-        reverse_proxy localhost:8000
+        reverse_proxy backend:8000
     }
     handle /admin/* {
-        reverse_proxy localhost:8000
+        reverse_proxy backend:8000
     }
     handle /static/* {
-        reverse_proxy localhost:8000
+        reverse_proxy backend:8000
     }
 
     # Next.js frontend (catch-all)
     handle {
-        reverse_proxy localhost:3000
+        reverse_proxy frontend:3000
     }
 }

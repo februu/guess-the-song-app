@@ -5,10 +5,15 @@ services:
       dockerfile: dev.Dockerfile
     volumes:
       - ./backend:/app
+      - backend_venv:/opt/venv
     ports:
       - "8000:8000"
+    env_file: .env
     environment:
-      REDIS_URL: redis://redis:6379
+      POSTGRES_HOST: postgres
+    depends_on:
+      - redis
+      - postgres
 
   frontend:
     build:
@@ -16,9 +21,11 @@ services:
       dockerfile: dev.Dockerfile
     volumes:
       - ./frontend:/app
-      - /app/node_modules
+      - frontend_node_modules:/app/node_modules
     ports:
       - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE: http://127.0.0.1:8000
     depends_on:
       - backend
 
@@ -26,3 +33,19 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-guessthesong}"
+      POSTGRES_USER: "${POSTGRES_USER:-guessthesong}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+
+volumes:
+  backend_venv:
+  frontend_node_modules:
+  postgres_dev_data:

@@ -43,6 +43,7 @@ export interface SongResult {
   title: string;
   artist: string;
   img: string | null;
+  is_last_round: boolean;
 }
 
 // ─── Incoming (server → client) ───//

@@ -8,3 +8,6 @@ migrate:
 
 test:
     docker compose -f dev.docker-compose.yml run --rm backend uv run --group test pytest
+
+production:
+    docker compose -f docker-compose.yml up --build

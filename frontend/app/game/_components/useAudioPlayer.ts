@@ -34,7 +34,8 @@ export function useAudioPlayer() {
     ctx.resume();
 
     // Unlock function : resumes the audio context on the first user interaction
-    const unlock = () => { ctx.resume(); removeUnlock(); };  
+    const unlock = () => { if (ctx.state !== "closed") ctx.resume(); removeUnlock(); };
+    unlockRef.current = unlock;
     document.addEventListener("click",   unlock, { once: true });
     document.addEventListener("keydown", unlock, { once: true });
 

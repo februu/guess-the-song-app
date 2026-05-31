@@ -4,7 +4,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    env_file: backend/.env
+    env_file: .env
     environment:
       FRONTEND_URL: "${FRONTEND_URL:-http://localhost:3000}"
       SPOTIFY_REDIRECT_URI: "${SPOTIFY_REDIRECT_URI:-http://localhost:8000/callback}"
@@ -28,7 +28,6 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_BASE: "${NEXT_PUBLIC_API_BASE:-}"
-        NEXT_PUBLIC_BACKEND_WS_URL: "${NEXT_PUBLIC_BACKEND_WS_URL:-}"
     ports:
       - "127.0.0.1:3000:3000"
     restart: unless-stopped
@@ -36,9 +35,9 @@ services:
   caddy:
     image: caddy:2-alpine
     ports:
-      - "0.0.0.0:80:80"
+      - "0.0.0.0:8080:8080"
     volumes:
-      - ./Caddyfile.present:/etc/caddy/Caddyfile
+      - ./Caddyfile:/etc/caddy/Caddyfile
     depends_on:
       - frontend
       - backend

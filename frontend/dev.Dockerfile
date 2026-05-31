@@ -1,4 +1,6 @@
 FROM node:25-alpine
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
 EXPOSE 3000
-CMD ["sh", "-c", "npm install && npm run dev"]
+CMD ["npm", "run", "dev"]

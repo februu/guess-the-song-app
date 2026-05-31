@@ -150,15 +150,17 @@ class GameManager:
             )
 
             for i, track in enumerate(tracks):
+                is_last_round = i == len(tracks) - 1
                 await self._run_round(
                     room_code,
                     channel_layer,
                     track,
                     round_number=i + 1,
                     prefetched_url=prefetched_url,
+                    is_last_round=is_last_round,
                 )
 
-                if i < len(tracks) - 1:
+                if not is_last_round:
                     # Prefetch the next track's URL while the break is running.
                     prefetched_url, _ = await asyncio.gather(
                         self._prefetch_url(tracks[i + 1]),
@@ -197,6 +199,7 @@ class GameManager:
         track: dict,
         round_number: int,
         prefetched_url: tuple[str, float | None] | None = None,
+        is_last_round: bool = False,
     ):
         """
         Runs a single round:
@@ -249,7 +252,7 @@ class GameManager:
 
         self._rounds.pop(room_code, None)
 
-        await self._finalize_round(room_code, channel_layer, round_state)
+        await self._finalize_round(room_code, channel_layer, round_state, is_last_round)
 
     async def _stream_audio(
         self,
@@ -339,7 +342,7 @@ class GameManager:
         await rm.broadcast(room_code, "round.audio_end", {}, channel_layer)
 
     async def _finalize_round(
-        self, room_code: str, channel_layer, round_state: RoundState
+        self, room_code: str, channel_layer, round_state: RoundState, is_last_round: bool = False
     ):
         """
         Broadcasts the final scoreboard (already updated in real-time by submit_guess),
@@ -358,6 +361,7 @@ class GameManager:
                         "title": round_state.track["name"],
                         "artist": ", ".join(round_state.track.get("artists", [])),
                         "img": round_state.track.get("image_url"),
+                        "is_last_round": is_last_round,
                     },
                 },
             )

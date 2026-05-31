@@ -158,10 +158,12 @@ function GameContent() {
           const result = msg.data as SongResult;
           setReveal(result); setPhase("reveal");
           if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-          revealTimerRef.current = setTimeout(() => {
-            setPhase((c) => c === "reveal" ? "waiting" : c);
-            setReveal(null);
-          }, 3000);
+          if (!msg.data.is_last_round) {
+            revealTimerRef.current = setTimeout(() => {
+              setPhase((c) => c === "reveal" ? "waiting" : c);
+              setReveal(null);
+            }, 3000);
+          }
           break;
         }
         // When the room state is updated, unsubscribe from the WebSocket messages,

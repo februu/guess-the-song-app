@@ -10,9 +10,7 @@ COPY . .
 # Leave empty to use relative URLs through nginx (same-origin deployment).
 # Override with build-arg if your backend is on a separate domain.
 ARG NEXT_PUBLIC_API_BASE=""
-ARG NEXT_PUBLIC_BACKEND_WS_URL=""
-ENV NEXT_PUBLIC_API_BASE=$NEXT_PUBLIC_API_BASE \
-    NEXT_PUBLIC_BACKEND_WS_URL=$NEXT_PUBLIC_BACKEND_WS_URL
+ENV NEXT_PUBLIC_API_BASE=$NEXT_PUBLIC_API_BASE
 
 RUN npm run build
 

@@ -1,15 +1,15 @@
 import type { ServerMessage, ClientMessage } from "../api/messages";
+import { API_BASE } from "../api/client";
 
+// Derive WS base from API_BASE so there's a single source of truth.
+// API_BASE="" means same-origin (prod via reverse proxy) — derive from window.location.
+// Otherwise replace http(s) scheme with ws(s).
 function getWsBase(): string {
-  if (process.env.NEXT_PUBLIC_BACKEND_WS_URL) return process.env.NEXT_PUBLIC_BACKEND_WS_URL;
-  // In production the Dockerfile bakes NEXT_PUBLIC_API_BASE="" (same-origin via reverse proxy).
-  // Derive the WS URL from the current page origin so wss:// is used automatically with HTTPS.
-  // In dev the var is undefined, so we fall back to the hardcoded local backend port.
-  if (process.env.NEXT_PUBLIC_API_BASE === "" && typeof window !== "undefined") {
+  if (!API_BASE) {
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${proto}//${window.location.host}`;
   }
-  return "ws://127.0.0.1:8000";
+  return API_BASE.replace(/^http/, "ws");
 }
 
 type MessageHandler = (msg: ServerMessage) => void;
@@ -28,7 +28,7 @@ class GameWebSocket {
         return;
       }
 
-      this.ws = new WebSocket(`${WS_URL}/ws/game/`); // create new WebSocket connection
+      this.ws = new WebSocket(`${getWsBase()}/ws/game/`); // create new WebSocket connection
       this.ws.binaryType = "arraybuffer";  // expect binary messages as ArrayBuffer
 
       this.ws.onopen = () => resolve(); // connection established
