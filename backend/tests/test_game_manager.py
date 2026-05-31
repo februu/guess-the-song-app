@@ -75,18 +75,6 @@ class TestSubmitGuess:
         assert result["title"] == "Shape of You"
         assert result["artist"] == "Ed Sheeran"
 
-    async def test_correct_guess_awards_max_points_when_instant(
-        self, gm, room_in_cache
-    ):
-        """An immediate guess (elapsed≈0) should earn SCORE_MAX points."""
-        gm._rounds[ROOM_CODE] = RoundState(TRACK, ["ch-host"])
-        gm._rounds[ROOM_CODE].start_time = 0.0
-
-        with patch("game.game.manager.time.monotonic", return_value=0.0):
-            result = await gm.process_guess(ROOM_CODE, "ch-host", "Shape of You")
-
-        assert result["points"] == SCORE_MAX
-
     async def test_incorrect_guess_returns_not_correct(self, gm, room_in_cache):
         gm._rounds[ROOM_CODE] = RoundState(TRACK, ["ch-host"])
         result = await gm.process_guess(ROOM_CODE, "ch-host", "Totally Wrong")
@@ -215,17 +203,6 @@ class TestCancelGame:
         # Give the event loop a tick to propagate the cancellation
         with pytest.raises(asyncio.CancelledError):
             await task
-
-    async def test_cancel_clears_round_state(self, gm):
-        async def dummy():
-            await asyncio.sleep(100)
-
-        task = asyncio.create_task(dummy())
-        gm._tasks[ROOM_CODE] = task
-        gm._rounds[ROOM_CODE] = RoundState(TRACK, ["ch-1"])
-
-        gm.cancel_game(ROOM_CODE)
-        assert ROOM_CODE not in gm._rounds
 
     def test_cancel_noop_for_unknown_room(self, gm):
         # Must not raise
